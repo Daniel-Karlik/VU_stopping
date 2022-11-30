@@ -79,29 +79,29 @@ class Environment:
         '''
         self.history[1] = action
 
-# TODO: BaseAgent finish + rest
 
 class BaseAgent:
 
     def __init__(self):
         """
-        Initialize agent class without information fusion. This agent demonstrates a benchmark.
+        Initialize agent class without information fusion.
         """
         self.occurrence_table = self.initialize_prior_occurrence_table()
         self.num_actions, self.num_states = self.occurrence_table.shape
+        self.history = HISTORY
 
     @staticmethod
     def initialize_prior_occurrence_table() -> np.ndarray:
         """
-        Initialize prior occurrence table $V_{o_{\M{a}}}$.
+        Initialize prior occurrence table $V_{o}$.
         """
-        return A_VEC.copy()
+        return np.random.randint(1, 3, size=(dim[0], dim[1], dim[2]))
 
-    def update_occurrence_table(self, action: int, state: int) -> None:
+    def update_occurrence_table(self, new_state: int) -> None:
         """
         Updates the occurrence table during each decision step.
         """
-        self.occurrence_table[action][state] += 1
+        self.occurrence_table[new_state][self.history[1]][self.history[0]] += 1
 
     def generate_action(self) -> int:
         """
@@ -112,3 +112,14 @@ class BaseAgent:
         new_action = np.random.choice([a for a in range(self.num_actions)], 1)[0]
         return new_action
 
+    def make_prediction(self):
+        """
+        Makes a prediction based on occurence table
+        :return:
+        """
+        # probabilities from occurence table
+        probabilities = self.occurrence_table[:][self.history[1]][self.history[0]] \
+        / np.sum(self.occurrence_table[:][self.history[1]][self.history[0]])
+        predicted_state = np.random.choice([a for a in range(self.num_actions)], 1, p=probabilities)[0]
+        # predicted_state = np.max(probabilities) # state with highest probability
+        return predicted_state
