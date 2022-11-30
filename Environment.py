@@ -15,17 +15,19 @@ dim = [NUM_STATES, NUM_ACTIONS, NUM_STATES]
 history = [0, 0]
 HISTORY = np.array([history], dtype=int)
 
+
 class Environment:
 
     def __init__(self, num_states, num_actions):
-        '''
+        """
         Init an Environment representing unknown model consisting of transition matrix and
         history influencing upcoming state
         :param num_states: Number of states in estimated system
         :param num_actions: Number of actions in estimated system
         :param transition_matrix: Transition matrix represents probability matrix
+        :param history: history[0] = previous state, history[1] = previous action
         variable t: represents the time stamp we are currently in
-        '''
+        """
         self.num_states = num_states
         self.num_actions = num_actions
         self.transition_matrix = self.initialize_transition_matrix(SEED)
@@ -100,4 +102,13 @@ class BaseAgent:
         Updates the occurrence table during each decision step.
         """
         self.occurrence_table[action][state] += 1
+
+    def generate_action(self) -> int:
+        """
+        Generates new action
+        :return: return new action
+        """
+        # TODO: Some more robust/clever solution
+        new_action = np.random.choice([a for a in range(self.num_actions)], 1)[0]
+        return new_action
 
