@@ -13,7 +13,7 @@ NUM_STATES = 3
 NUM_ACTIONS = 4
 dim = [NUM_STATES, NUM_ACTIONS, NUM_STATES]
 history = [0, 0]
-HISTORY = np.array([history], dtype=int)
+HISTORY = np.array(history, dtype=int)
 
 
 class Environment:
@@ -65,7 +65,7 @@ class Environment:
         Generates  new state according to the transition probability matrix and
         history (previously observed actions and states)
         """
-        probabilities = self.transition_matrix[:][self.history]
+        probabilities = self.transition_matrix[:, self.history[1], self.history[0]]
         self.time += 1
         new_state = np.random.choice([s for s in range(self.num_states)], 1, p=probabilities)[0]
         self.history[0] = new_state
@@ -87,7 +87,7 @@ class BaseAgent:
         Initialize agent class without information fusion.
         """
         self.occurrence_table = self.initialize_prior_occurrence_table()
-        self.num_actions, self.num_states = self.occurrence_table.shape
+        self.num_states, self.num_actions = self.occurrence_table.shape[0], self.occurrence_table.shape[1]
         self.stop_ind = 1
         self.history = HISTORY
 
@@ -103,7 +103,7 @@ class BaseAgent:
         Updates the occurrence table during each decision step, if we did not stopped
         """
         if self.stop_ind == 1:
-            self.occurrence_table[new_state][self.history[1]][self.history[0]] += 1
+            self.occurrence_table[new_state, self.history[1], self.history[0]] += 1
 
     def generate_action(self) -> int:
         """
@@ -120,8 +120,8 @@ class BaseAgent:
         :return:
         """
         # probabilities from occurence table
-        probabilities = self.occurrence_table[:][self.history[1]][self.history[0]] \
-                        / np.sum(self.occurrence_table[:][self.history[1]][self.history[0]])
-        predicted_state = np.random.choice([a for a in range(self.num_actions)], 1, p=probabilities)[0]
+        probabilities = self.occurrence_table[:, self.history[1], self.history[0]] \
+                        / np.sum(self.occurrence_table[:, self.history[1], self.history[0]])
+        predicted_state = np.random.choice([a for a in range(self.num_states)], 1, p=probabilities)[0]
         # predicted_state = np.max(probabilities) # state with highest probability
         return predicted_state

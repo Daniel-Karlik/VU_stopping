@@ -118,7 +118,10 @@ if __name__ == '__main__':
     # env = Environment(num_states, num_actions, env_matrix, history)
     # print("Environment matrix")
     # print(env.transition_matrix)
-    Experiment(100, 10)
+    num_states = 3
+    num_actions = 4
+    experiment1 = Experiment(num_states, num_actions, 100, 10)
+    experiment1.run()
 
 
 

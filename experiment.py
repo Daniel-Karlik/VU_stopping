@@ -12,10 +12,13 @@ SEED = 1
 
 class Experiment:
 
-    def __init__(self, num_steps: int, num_mc_runs: int) -> None:
+    def __init__(self, num_states: int, num_actions: int,
+                 num_steps: int, num_mc_runs: int) -> None:
         """
         Initialize experiment.
         """
+        self.num_states = num_states
+        self.num_actions = num_actions
         self.num_steps = num_steps
         self.num_mc_runs = num_mc_runs
 
@@ -33,7 +36,7 @@ class Experiment:
         Run experiment.
         """
         for i in range(self.num_mc_runs):
-            mcs = MonteCarloSimulation(self.num_steps)
+            mcs = MonteCarloSimulation(self.num_states, self.num_actions, self.num_steps)
             mcs.perform_single_run()
 
     def plot_results(self, results: Dict[float, np.ndarray]) -> None:
@@ -65,14 +68,15 @@ class Experiment:
 
 class MonteCarloSimulation:
 
-    def __init__(self, num_steps: int) -> None:
+    def __init__(self, num_states: int, num_actions: int, num_steps: int) -> None:
         """
         Initialize a single Monte Carlo simulation.
         """
+        self.num_states, self.num_actions = num_states, num_actions
         self.num_steps = num_steps
-        self.environment = Environment()
+        self.environment = Environment(self.num_states, self.num_actions)
         self.agent = BaseAgent()
-        self.prediction_table = np.array((num_steps, 2), dtype=int)
+        self.prediction_table = np.zeros((num_steps+1, 2), dtype=int)
 
     def perform_single_run(self) -> np.ndarray:
         """
@@ -112,7 +116,7 @@ class MonteCarloSimulation:
         Store predicted and observed states
         :return:
         """
-        self.prediction_table[self.environment.time, 2] = [predicted_state, observable_state]
+        self.prediction_table[self.environment.time, :] = [predicted_state, observable_state]
 
 
     @staticmethod
