@@ -4,7 +4,8 @@
 # Press Double Shift to search everywhere for classes, files, tool windows, actions, and settings.
 import numpy as np
 import ParametricEstimator
-from Environment import Environment
+from experiment import Experiment
+from Environment import Environment, BaseAgent
 import random
 
 
@@ -100,23 +101,25 @@ if __name__ == '__main__':
     # Here the code continues
 
     #primary_est = ParametricEstimator(num_states, num_actions, 3)
-    qq = model_dim(3, 2)
-    print(qq)
-    print(np.shape(qq))
-    matrix = init_3d_trans_matrix([3, 4, 3], 10)
-    print("matrix [2, 2, 2] is : ")
-    print(matrix)
-    print("First row")
-    print(matrix[:, 0, 0])
-    #print(matrix[:, 0, 1])
-    num_states = 3
-    num_actions = 4
-    seed = 10
-    env_matrix = init_3d_trans_matrix([num_states, num_actions, num_states], seed)
-    history = [2, 2]
-    env = Environment(num_states, num_actions, env_matrix, history)
-    print("Environment matrix")
-    print(env.transition_matrix)
+    # qq = model_dim(3, 2)
+    # print(qq)
+    # print(np.shape(qq))
+    # matrix = init_3d_trans_matrix([3, 4, 3], 10)
+    # print("matrix [2, 2, 2] is : ")
+    # print(matrix)
+    # print("First row")
+    # print(matrix[:, 0, 0])
+    # #print(matrix[:, 0, 1])
+    # num_states = 3
+    # num_actions = 4
+    # seed = 10
+    # env_matrix = init_3d_trans_matrix([num_states, num_actions, num_states], seed)
+    # history = [2, 2]
+    # env = Environment(num_states, num_actions, env_matrix, history)
+    # print("Environment matrix")
+    # print(env.transition_matrix)
+    Experiment(100, 10)
+
 
 
 # See PyCharm help at https://www.jetbrains.com/help/pycharm/

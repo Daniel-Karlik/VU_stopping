@@ -32,8 +32,9 @@ class Experiment:
         """
         Run experiment.
         """
-        results = {}
-        self.plot_results(results)
+        for i in range(self.num_mc_runs):
+            mcs = MonteCarloSimulation(self.num_steps)
+            mcs.perform_single_run()
 
     def plot_results(self, results: Dict[float, np.ndarray]) -> None:
         """
@@ -71,17 +72,22 @@ class MonteCarloSimulation:
         self.num_steps = num_steps
         self.environment = Environment()
         self.agent = BaseAgent()
+        self.prediction_table = np.array((num_steps, 2), dtype=int)
 
     def perform_single_run(self) -> np.ndarray:
         """
-        Perform a single run for the given number of decision steps and return a final Kullback-Leibler divergence.
+        Perform a single run for the given number of decision steps and return some error plots.
         """
         for step in range(self.num_steps):
-            action = self.environment.action()
-            observable_state = self.environment.state()
-            self.agent.update_occurrence_table(action, observable_state)
-            self.agent.update_occurrence_table(action, observable_state)
-        return self._compute_kld()
+            # We make prediction before observing new state
+            predicted_state = self.agent.make_prediction()
+            observable_state = self.environment.generate_state()
+            action = self.agent.generate_action()
+            self.agent.update_occurrence_table(observable_state)
+            self.store_pred(observable_state, predicted_state)
+        errors = self.error_compute()
+        print(errors)
+        return errors
 
     def _compute_kld(self) -> np.ndarray:
         """
@@ -92,6 +98,22 @@ class MonteCarloSimulation:
             env_prob = self._to_probabilities(self.environment.occurrence_table[action])
             kld[action][2] = sum(np.multiply(env_prob, np.divide(env_prob, self._to_probabilities(self.agent.occurrence_table[action]))))
         return kld
+
+    def error_compute(self) -> np.ndarray:
+        """
+        Compute number of errors from observed and predicted states
+        :return:
+        """
+        step_error = np.abs(self.prediction_table[:, 0] - self.prediction_table[:, 1])
+        return np.sum(step_error)
+
+    def store_pred(self, observable_state: int, predicted_state: int):
+        """
+        Store predicted and observed states
+        :return:
+        """
+        self.prediction_table[self.environment.time, 2] = [predicted_state, observable_state]
+
 
     @staticmethod
     def _to_probabilities(occurrences: np.ndarray) -> np.ndarray:
