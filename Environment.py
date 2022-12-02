@@ -72,11 +72,11 @@ class Environment:
         return new_state
 
     def obtain_action(self, action: int):
-        '''
+        """
         Update the history array with new action
         :param action: newly performed action
         :return:
-        '''
+        """
         self.history[1] = action
 
 
@@ -88,6 +88,7 @@ class BaseAgent:
         """
         self.occurrence_table = self.initialize_prior_occurrence_table()
         self.num_actions, self.num_states = self.occurrence_table.shape
+        self.stop_ind = 1
         self.history = HISTORY
 
     @staticmethod
@@ -99,9 +100,10 @@ class BaseAgent:
 
     def update_occurrence_table(self, new_state: int) -> None:
         """
-        Updates the occurrence table during each decision step.
+        Updates the occurrence table during each decision step, if we did not stopped
         """
-        self.occurrence_table[new_state][self.history[1]][self.history[0]] += 1
+        if self.stop_ind == 1:
+            self.occurrence_table[new_state][self.history[1]][self.history[0]] += 1
 
     def generate_action(self) -> int:
         """
@@ -119,7 +121,7 @@ class BaseAgent:
         """
         # probabilities from occurence table
         probabilities = self.occurrence_table[:][self.history[1]][self.history[0]] \
-        / np.sum(self.occurrence_table[:][self.history[1]][self.history[0]])
+                        / np.sum(self.occurrence_table[:][self.history[1]][self.history[0]])
         predicted_state = np.random.choice([a for a in range(self.num_actions)], 1, p=probabilities)[0]
         # predicted_state = np.max(probabilities) # state with highest probability
         return predicted_state
