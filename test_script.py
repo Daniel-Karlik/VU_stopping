@@ -81,6 +81,8 @@ model_matrix = random_matrix
 id_dec = np.random.uniform(size=(num_states, num_actions), low=0, high=1)
 id_dec[0] = id_dec[0]/np.sum(id_dec[0])
 id_dec[1] = id_dec[1]/np.sum(id_dec[1])
+# print("id_dec")
+# print(id_dec)
 
 print("trans matrix")
 print(trans_matrix)
@@ -193,13 +195,13 @@ def d_fun(time: int, action: int, stop_action: int, prev_state: int, prev_stop_s
     for i in range(num_states):
         for stop in range(num_stop_states):
             model = model_prob(i, stop, action, stop_action, prev_state, prev_stop_state)
-            print("regular model and id_model")
-            print(i, " stop_state is ", stop, " ", action, " stop_action is ", stop_action, " ", prev_state,
-                  " prev_stop_state is ", prev_stop_state)
+            # print("regular model and id_model")
+            # print(i, " stop_state is ", stop, " ", action, " stop_action is ", stop_action, " ", prev_state,
+            #       " prev_stop_state is ", prev_stop_state)
             # print(i, stop, action, stop_action, prev_state, prev_stop_state)
-            print(model)
+            # print(model)
             id_mod = model_ideal_prob(i, stop, action, stop_action, prev_state, prev_stop_state)
-            print(id_mod)
+            # print(id_mod)
             if model == 0:
                 output += 0
             else:
@@ -262,13 +264,21 @@ print("OPTIMAL POLICY EVALUATION")
 opt_policy = optimal_policy(num_actions, num_stop_actions, num_states, num_stop_states, h_storage, d_storage)
 print(opt_policy)
 
-# for action in range(num_actions):
-#     for stop_action in range(num_stop_actions):
-#         for state in range(num_states):
-#             for stop_state in range(num_stop_states):
-#                 print(action, stop_action, state, stop_state)
-#                 print(ideal_decision_rule(action, stop_action, state, stop_state))
+print("IDEAL DECISION RULE")
+id_dec_rule = opt_policy = np.zeros((num_actions, num_stop_actions, num_states, num_stop_states))
+for action in range(num_actions):
+    for stop_action in range(num_stop_actions):
+        for state in range(num_states):
+            for stop_state in range(num_stop_states):
+                # print(action, stop_action, state, stop_state)
+                # print(ideal_decision_rule(action, stop_action, state, stop_state))
+                id_dec_rule[action, stop_action, state, stop_state] = ideal_decision_rule(action, stop_action, state,
+                                                                                          stop_state)
+print(id_dec_rule)
 
+# Zda se ze ideal_decision_rule funguje spravne
+# print("Checking state and stop_state")
+# print(id_dec_rule[:, :, 0, 1])
 # print(h_storage)
 
 
