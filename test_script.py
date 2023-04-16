@@ -105,7 +105,7 @@ def model_prob(state: int, stop_state: int, action: int, stop_action: int,
     :return:
     """
     if stop_action == stop_state:
-        if prev_stop_state == 1:
+        if stop_state == 1:
             # if already did not stop the process
             return model_matrix[state, action, prev_state]
         else:
@@ -133,7 +133,13 @@ def model_ideal_prob(state: int, stop_state: int, action: int, stop_action: int,
             return trans_matrix[state, action, prev_state]
         else:
             # if the process should stop we don't care about ideal and let it be same as modelled
-            if prev_stop_state == 1:
+            # if prev_stop_state == 1:
+            #     # if already did not stop the process
+            #     return model_matrix[state, action, prev_state]
+            # else:
+            #     # if the process is already stopped e.g. prev_stop_state == 0
+            #     return 1 if prev_state == state else 0
+            if stop_state == 1:
                 # if already did not stop the process
                 return model_matrix[state, action, prev_state]
             else:
@@ -324,6 +330,7 @@ a = 0
 # print(model_matrix)
 # print("real matrix")
 # print(trans_matrix)
+
 
 
 

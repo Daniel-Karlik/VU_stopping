@@ -38,6 +38,8 @@ class Experiment:
         for i in range(self.num_mc_runs):
             mcs = MonteCarloSimulation(self.num_states, self.num_actions, self.num_steps)
             mcs.perform_single_run()
+            errors = mcs.error_compute()
+            print(errors)
 
     def plot_results(self, results: Dict[float, np.ndarray]) -> None:
         """
@@ -74,24 +76,37 @@ class MonteCarloSimulation:
         """
         self.num_states, self.num_actions = num_states, num_actions
         self.num_steps = num_steps
-        self.environment = Environment(self.num_states, self.num_actions)
-        self.agent = BaseAgent()
+        self.environment = Environment(self.num_states, self.num_actions, seed=2)
+        self.agent = BaseAgent(self.num_states, self.num_actions, seed=2)
+        self.history = np.zeros((num_steps+1, 2), dtype=int)
         self.prediction_table = np.zeros((num_steps+1, 2), dtype=int)
 
-    def perform_single_run(self) -> np.ndarray:
+    def init_history(self):
+        """
+        Initialize history of the single run simulation
+        :return:
+        """
+        history = np.zeros((self.num_steps + 1, 2), dtype=int)
+        history[0, 0:1] = self.agent.history[0:1]
+        return history
+
+    def perform_single_run(self):
         """
         Perform a single run for the given number of decision steps and return some error plots.
         """
         for step in range(self.num_steps):
             # We make prediction before observing new state
             predicted_state = self.agent.make_prediction()
+            # The Environment generates new state
             observable_state = self.environment.generate_state()
-            action = self.agent.generate_action()
             self.agent.update_occurrence_table(observable_state)
+            # Agent generates action
+            # TODO maybe better way to handle history + generating new action in agent class
+            action = self.agent.generate_action()
+            # Histories of environment and agent are updated
+            self.agent.update_history(action, observable_state)
+            self.environment.update_history(action, observable_state)
             self.store_pred(observable_state, predicted_state)
-        errors = self.error_compute()
-        print(errors)
-        return errors
 
     def _compute_kld(self) -> np.ndarray:
         """
@@ -106,7 +121,7 @@ class MonteCarloSimulation:
     def error_compute(self) -> np.ndarray:
         """
         Compute number of errors from observed and predicted states
-        :return:
+        :return: cumulative sum of errors
         """
         step_error = np.abs(self.prediction_table[:, 0] - self.prediction_table[:, 1])
         return np.sum(step_error)
@@ -116,12 +131,11 @@ class MonteCarloSimulation:
         Store predicted and observed states
         :return:
         """
-        self.prediction_table[self.environment.time, :] = [predicted_state, observable_state]
-
+        self.prediction_table[self.environment.time, :] = [observable_state, predicted_state]
 
     @staticmethod
     def _to_probabilities(occurrences: np.ndarray) -> np.ndarray:
         """
-        Normalize occurrence table $V_{o_{\M{a}}}$ to probabilities.
+        Normalize occurrence table $V_{o_{\\M{a}}}$ to probabilities.
         """
         return occurrences / sum(occurrences)

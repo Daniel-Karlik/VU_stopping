@@ -27,24 +27,23 @@ def normalize_trans_matrix(matrix):
 
     return matrix_help
 
+
 def model_dim(num_states, num_actions):
-    #task = input("Enter dependencies of probability table: \n 'S' as state, 'A' as action, '-' as none")
+    #  task = input("Enter dependencies of probability table: \n 'S' as state, 'A' as action, '-' as none")
     task = "SASA"
     task_to_array = [char for char in task]
     new_task = task_to_array
-    ### This is the way how to force python to see string as a selected variable
+    # This is the way how to force python to see string as a selected variable
     my_dict = {}
     x = "num_states"
     my_dict[x] = num_states
     y = "num_actions"
     my_dict[y] = num_actions
-    ### -----------------------------
+    # -----------------------------
     for i in range(len(task_to_array)):
         new_task[i] = task_to_array[i].replace("S", "num_states")
         new_task[i] = task_to_array[i].replace("A", "num_actions")
         new_task[i] = task_to_array[i].replace("-", "")
-
-
     dimensions = np.ones(len(task_to_array))
     for i in range(len(task_to_array)):
         dimensions[i] = my_dict[task_to_array[i]]
@@ -52,13 +51,14 @@ def model_dim(num_states, num_actions):
     dim = dimensions.astype(int)
     return dim
 
+
 def init_3d_trans_matrix(dimensions, seed):
-    '''
+    """
     Init_3d_trans_matrix creates randomly 3D random transition matrix
     :param dimensions: should be len == 3
     :param seed: initialize random matrix
     :return: transition matrix
-    '''
+    """
     dim = dimensions
     random.seed(seed, version=2)
     help_matrix = np.ones((dim[0], dim[1], dim[2]))
@@ -70,9 +70,7 @@ def init_3d_trans_matrix(dimensions, seed):
     for o in range(dim[1]):
         for p in range(dim[2]):
             help_matrix[:, o, p] = help_matrix[:, o, p]/np.sum(help_matrix[:, o, p])
-
     return help_matrix
-
 
 # Leave this to spare time and future work...
 def cartesian_product(matrix, vector):
@@ -120,7 +118,7 @@ if __name__ == '__main__':
     # print(env.transition_matrix)
     num_states = 3
     num_actions = 4
-    experiment1 = Experiment(num_states, num_actions, 100, 10)
+    experiment1 = Experiment(num_states, num_actions, num_steps=100, num_mc_runs=10)
     experiment1.run()
 
 
