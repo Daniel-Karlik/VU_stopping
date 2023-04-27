@@ -13,7 +13,8 @@ SEED = 1
 class Experiment:
 
     def __init__(self, num_states: int, num_actions: int,
-                 num_steps: int, num_mc_runs: int) -> None:
+                 num_steps: int, num_mc_runs: int, model_i: np.ndarray, model: np.ndarray,
+                 q_i: np.ndarray) -> None:
         """
         Initialize experiment.
         """
@@ -21,56 +22,123 @@ class Experiment:
         self.num_actions = num_actions
         self.num_steps = num_steps
         self.num_mc_runs = num_mc_runs
+        self.model_i = model_i
+        self.model = model
+        self.q_i = q_i
+        self.agent = BaseAgent(self.num_states, self.num_actions, self.model_i, self.model,
+                               self.q_i, seed=2)
+        self.d_storage = np.zeros((self.num_steps, self.num_actions, self.agent.num_stop_actions, self.num_states,
+                                   self.agent.num_stop_states))
+        self.h_storage = np.zeros((self.num_steps, self.num_states, self.agent.num_stop_states))
+        h_init = 1
+        self.h_storage[-1] = h_init
 
     def _get_averaged_kld(self) -> np.ndarray:
         """
         Return an average of Kullback-Leibler divergence over the number of Monte Carlo runs.
         """
-        avg_kld = np.zeros((1, 3), dtype=float)
-        for i in range(self.num_mc_runs):
-            avg_kld += MonteCarloSimulation(self.num_steps).perform_single_run()
-        return avg_kld / self.num_mc_runs
+        pass
 
     def run(self) -> None:
         """
-        Run experiment.
+        Run experiment and print errors.
         """
+        self.calculate_h_d_fun()
+        # Calculating and saving optimal_policy
+        opt_policy = self.optimal_policy()
         for i in range(self.num_mc_runs):
-            mcs = MonteCarloSimulation(self.num_states, self.num_actions, self.num_steps)
+            mcs = MonteCarloSimulation(self.num_states, self.num_actions, self.num_steps, self.model_i, self.model,
+                                       self.q_i)
             mcs.perform_single_run()
             errors = mcs.error_compute()
             print(errors)
+
+    def h_fun(self, time: int, state: int, stop_state: int) -> float: #or maybe -> np.ndarray?
+        """
+        Calculates h function values based on previous d function values and ideal decision rule
+        :param time:
+        :param state:
+        :param stop_state:
+        :param q_i:
+        :param d_storage:
+        :return:
+        """
+        output = 0
+
+        for i in range(self.num_actions):
+            for stop in range(self.num_stop_actions):
+                output += self.agent.ideal_decision_rule(i, stop, state, stop_state, self.q_i) * \
+                          np.exp(-self.d_storage[time+1, i, stop, state, stop_state])
+        return output
+
+    def d_fun(self, time: int, prev_state: int) -> float:
+        """
+        \mathsf{d}(a_{t},\StAc_{t},s_{t-1},\StSt_{t-1}) as defined in text
+        :param time:
+        :param action:
+        :param stop_action:
+        :param prev_state:
+        :param prev_stop_state:
+        :return:
+        """
+        output = 0
+        num_stop_states = 2
+        for i in range(self.num_states):
+            for stop in range(self.agent.num_stop_states):
+                model_reg = self.agent.model_prob(i, stop, prev_state)
+                id_mod = self.agent.model_ideal_prob(i, prev_state)
+                # print(id_mod)
+                if model_reg == 0:
+                    output += 0
+                else:
+                    output += model_reg*np.log(model_reg/(id_mod*self.h_storage[time, i, stop]))
+        fun_output = output
+        return fun_output
+
+    def calculate_h_d_fun(self, num_states: int, model: np.ndarray, model_i: np.ndarray):
+        t_init = self.num_steps - 1
+        for t_ind in range(t_init, -1, -1):
+            if t_ind != t_init:
+                for state in range(self.num_states):
+                    for stop_state in range(self.agent.num_stop_states):
+                        self.h_storage[t_ind, state, stop_state] = self.h_fun(t_ind, state, stop_state)  # h_fun(t_ind+1, state, stop_state)
+
+            # range(start, stop, step)
+            for action in range(self.num_actions):
+                for stop_action in range(self.agent.num_stop_actions):
+                    for state in range(self.num_states):
+                        for stop_state in range(self.agent.num_stop_states):
+                            self.d_storage[t_ind, action, stop_action, state, stop_state] = \
+                                self.d_fun(t_ind, state)
+
+    def normalize_d_fun(self) -> float:
+        pass
+
+    def optimal_policy(self) -> np.ndarray:
+        opt_policy = np.zeros((self.num_steps, self.num_actions, self.num_stop_actions, self.num_states, self.num_stop_states))
+        for t in range(self.num_steps-1, -1, -1):
+            for action in range(self.num_actions):
+                for stop_action in range(self.agent.num_stop_actions):
+                    for state in range(self.num_states):
+                        for stop_state in range(self.agent.num_stop_states):
+                            opt_policy[t, action, stop_action, state, stop_state] = \
+                                self.agent.ideal_decision_rule(action, state, stop_state) * \
+                                (np.exp(-self.d_stored[t, action, stop_action, state, stop_state]) /
+                                 self.h_stored[t, state, stop_state])
+        # print(np.shape(opt_policy))
+        return opt_policy
 
     def plot_results(self, results: Dict[float, np.ndarray]) -> None:
         """
         Plot figures.
         """
-        fontsize = 16
-        ext_agent_kld = []
-        base_agent_kld = []
-        agent_kld = []
-
-        for w in self.w_span:
-            ext_agent_kld.append(results[w][0][0])
-            base_agent_kld.append(results[w][0][1])
-            agent_kld.append(results[w][0][2])
-
-        fig = plt.figure()
-        ax = fig.add_subplot(111)
-        ax.plot(self.w_span, base_agent_kld, c='b', ls='--', linewidth=4)
-        ax.plot(self.w_span, agent_kld, c='r', ls='-', linewidth=4)
-        plt.xlabel(r'$\mathsf{w}$', fontsize=fontsize)
-        plt.ylabel('KLD', fontsize=fontsize)
-        plt.xticks(fontsize=fontsize)
-        plt.yticks(fontsize=fontsize)
-        plt.grid()
-        #plt.savefig(Path(__file__).parent / f'figures/results_for_alpha_{self.alpha.__str__().replace(".", "-")}.png')
-        plt.show()
+        pass
 
 
 class MonteCarloSimulation:
 
-    def __init__(self, num_states: int, num_actions: int, num_steps: int) -> None:
+    def __init__(self, num_states: int, num_actions: int, num_steps: int, model_i: np.ndarray, model: np.ndarray,
+                 q_i: np.ndarray) -> None:
         """
         Initialize a single Monte Carlo simulation.
         """
@@ -80,6 +148,9 @@ class MonteCarloSimulation:
         self.agent = BaseAgent(self.num_states, self.num_actions, seed=2)
         self.history = np.zeros((num_steps+1, 2), dtype=int)
         self.prediction_table = np.zeros((num_steps+1, 2), dtype=int)
+        self.model_i = model_i
+        self.model = model
+        self.q_i = q_i
 
     def init_history(self):
         """
@@ -112,11 +183,7 @@ class MonteCarloSimulation:
         """
         Compute Kullback_Leibler divergences.
         """
-        kld = np.zeros((self.agent.num_actions, 3), dtype=float)
-        for action in range(self.agent.num_actions):
-            env_prob = self._to_probabilities(self.environment.occurrence_table[action])
-            kld[action][2] = sum(np.multiply(env_prob, np.divide(env_prob, self._to_probabilities(self.agent.occurrence_table[action]))))
-        return kld
+        pass
 
     def error_compute(self) -> np.ndarray:
         """
