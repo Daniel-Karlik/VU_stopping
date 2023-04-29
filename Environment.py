@@ -50,8 +50,8 @@ class Environment:
                 for k in range(self.num_states):
                     help_matrix[i, j, k] = random.random()
         # Section responsible for normalization
-        for o in range(dim[1]):
-            for p in range(dim[2]):
+        for o in range(self.num_actions):
+            for p in range(self.num_states):
                 help_matrix[:, o, p] = help_matrix[:, o, p] / np.sum(help_matrix[:, o, p])
         return help_matrix
 
@@ -87,7 +87,7 @@ class Environment:
 
 class BaseAgent:
 
-    def __init__(self, num_states: int, num_actions: int, model_i: np.ndarray, model: np.ndarrray,
+    def __init__(self, num_states: int, num_actions: int, model_i: np.ndarray, model: np.ndarray,
                  q_i: np.ndarray, seed):
         """
         Initialize agent class without information fusion.
@@ -169,15 +169,17 @@ class BaseAgent:
         id_dec = np.ones((self.num_states, self.num_actions))
         return id_dec[prev_state, action]
 
-    def model_prob(self, state: int, prev_state: int) -> float:
+    def model_prob(self, state: int, stop_action: int, stop_state: int, prev_state: int) -> float:
         """
         Returns value m(s_{t},\StSt_{t}|a_{t},\StAc_{t},s_{t-1},\StSt_{t-1})
         :param state: current state
+        :param stop_action: stop action
+        :param stop_state: stop state
         :param prev_state: previous state
-        :param model: real model values or estimated values of m(s_{t})
+        :param self.model: real model values or estimated values of m(s_{t})
         :return:
         """
-        if self.stop_action == self.stop_state:
+        if stop_action == stop_state:
             if self.stop_state == 1:
                 # if already did not stop the process
                 return self.model[state]
@@ -187,22 +189,22 @@ class BaseAgent:
         else:
             return 0
 
-    def model_ideal_prob(self, state: int, prev_state: int) -> float:
+    def model_ideal_prob(self, state: int, stop_state: int, stop_action: int, prev_state: int) -> float:
         """
         Returns value m^{i}(s_{t},\StSt_{t}|a_{t},\StAc_{t},s_{t-1},\StSt_{t-1})
         :param state: current state
+        :param stop_state: current stop state
+        :param stop_action: current stop action
         :param prev_state: previous state
-        :param model: normal model
-        :param model_i: ideal (desired) model
         :return:
         """
-        if self.stop_action == self.stop_state:
-            if self.stop_action == 1:
+        if stop_action == stop_state:
+            if stop_action == 1:
                 # if process should continue we return ideal model
                 return self.model_i[state]
             else:
                 # if the process should stop we don't care about ideal and let it be same as modelled
-                if self.stop_state == 1:
+                if stop_state == 1:
                     # if already did not stop the process
                     return self.model[state]
                 else:
@@ -211,8 +213,8 @@ class BaseAgent:
         else:
             return 0
 
-    def ideal_decision_rule(self, action: int, prev_state: int,
-                            prev_stop_state: int, q_i: np.ndarray) -> np.ndarray:
+    def ideal_decision_rule(self, action: int, stop_action: int, prev_state: int,
+                            prev_stop_state: int) -> np.ndarray:
         """
         Ideal decision rule as defined as in my text work
         :param action:
@@ -221,14 +223,14 @@ class BaseAgent:
         :param q_i: probability of stopping if the process is not stopped yet
         :return: one value based on inputs
         """
-        first_element = self.ideal_decision(action, prev_state) if self.stop_action == 1 \
+        first_element = self.ideal_decision(action, prev_state) if stop_action == 1 \
             else 1/self.num_actions
         # as else value we used uniform action selection
         if prev_stop_state == 0:
-            second_element = 1 if self.stop_action == 0 else 0
+            second_element = 1 if stop_action == 0 else 0
         else:
             # if prob we CONTINUE else we STOP
-            second_element = self.q_i[prev_state] if self.stop_action == 1 else 1 - self.q_i[prev_state]
+            second_element = self.q_i[prev_state] if stop_action == 1 else 1 - self.q_i[prev_state]
 
         final_output = first_element * second_element
         return final_output
