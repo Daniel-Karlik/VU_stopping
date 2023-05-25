@@ -25,6 +25,8 @@ class Experiment:
         self.model_i = model_i
         self.model = model
         self.q_i = q_i
+        # If we know the model of the Environment in advance e.g. we did population research
+        self.known_model = 1
         self.agent = BaseAgent(self.num_states, self.num_actions, self.model_i, self.model,
                                self.q_i, seed=2)
         self.d_storage = np.zeros((self.num_steps, self.num_actions, self.agent.num_stop_actions, self.num_states,
@@ -52,7 +54,7 @@ class Experiment:
         self.plot_opt_policy(self.num_steps-10, self.num_steps, opt_policy)
         for i in range(self.num_mc_runs):
             mcs = MonteCarloSimulation(self.num_states, self.num_actions, self.num_steps, self.model_i, self.model,
-                                       self.q_i, opt_policy)
+                                       self.q_i, opt_policy, self.known_model)
             self.state_sequence[i] = mcs.perform_single_run(self.stop_action_sequence[i], self.selected_state_sequence[i])
             #errors = mcs.error_compute()
             #print(errors)
@@ -123,6 +125,10 @@ class Experiment:
         pass
 
     def optimal_policy(self) -> np.ndarray:
+        """
+        Evaluates optimal policy based on calculated values of h and d functions
+        :return:
+        """
         opt_policy = np.zeros((self.num_steps, self.num_actions, self.agent.num_stop_actions, self.num_states,
                                self.agent.num_stop_states))
         for t in range(self.num_steps-1, -1, -1):
@@ -160,19 +166,21 @@ class Experiment:
 class MonteCarloSimulation:
 
     def __init__(self, num_states: int, num_actions: int, num_steps: int, model_i: np.ndarray, model: np.ndarray,
-                 q_i: np.ndarray, policy: np.ndarray) -> None:
+                 q_i: np.ndarray, policy: np.ndarray, known_model: int) -> None:
         """
         Initialize a single Monte Carlo simulation.
         """
         self.num_states, self.num_actions = num_states, num_actions
         self.num_steps = num_steps
-        self.environment = Environment(self.num_states, self.num_actions, seed=2)
+        self.known_model = known_model
         self.history = np.zeros((num_steps+1, 2), dtype=int)
         self.prediction_table = np.zeros((num_steps+1, 2), dtype=int)
         self.model_i = model_i
         self.model = model
         self.q_i = q_i
-        self.agent = BaseAgent(self.num_states, self.num_actions, self.model_i, self.model, self.q_i, seed=2)
+        seed = 2
+        self.environment = Environment(self.num_states, self.num_actions, seed, self.model, self.known_model)
+        self.agent = BaseAgent(self.num_states, self.num_actions, self.model_i, self.model, self.q_i, seed)
         self.policy = policy
 
     def init_history(self):
@@ -206,6 +214,7 @@ class MonteCarloSimulation:
             selected_state_sequence[step] = cur_state
             prev_stop = cur_stop_action
             stop_state = cur_stop_action
+
             # We make prediction before observing new state
             # predicted_state = self.agent.make_prediction()
             # # The Environment generates new state
@@ -219,13 +228,6 @@ class MonteCarloSimulation:
             # self.environment.update_history(action, observable_state)
             # self.store_pred(observable_state, predicted_state)
         return state_sequence
-
-
-    def _compute_kld(self) -> np.ndarray:
-        """
-        Compute Kullback_Leibler divergences.
-        """
-        pass
 
     def error_compute(self) -> np.ndarray:
         """

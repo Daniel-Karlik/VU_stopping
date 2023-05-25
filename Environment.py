@@ -20,7 +20,7 @@ HISTORY = np.array(history, dtype=int)
 
 class Environment:
 
-    def __init__(self, num_states: int, num_actions: int, seed):
+    def __init__(self, num_states: int, num_actions: int, seed: int, model: np.ndarray, known_model=0):
         """
         Init an Environment representing unknown model consisting of transition matrix and
         history influencing upcoming state
@@ -32,7 +32,10 @@ class Environment:
         """
         self.num_states = num_states
         self.num_actions = num_actions
-        self.transition_matrix = self.initialize_transition_matrix(seed)
+        if known_model == 0:
+            self.transition_matrix = self.initialize_transition_matrix(seed)
+        else:
+            self.transition_matrix = model
         self.history = self.init_history()
         self.time = 0
 
@@ -180,7 +183,7 @@ class BaseAgent:
         :return:
         """
         if stop_action == stop_state:
-            if self.stop_state == 1:
+            if stop_state == 1:
                 # if already did not stop the process
                 return self.model[state]
             else:
