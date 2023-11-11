@@ -117,9 +117,13 @@ if __name__ == '__main__':
     # print("Environment matrix")
     # print(env.transition_matrix)
     num_states = 3
-    num_actions = 4
-    seed = 1 # initialize the environment
-    experiment1 = Experiment(num_states, num_actions, 10, 10, seed)
+    num_actions = 1
+    num_steps = 100
+    num_mc_runs = 10
+    model_i = [0.7, 0.2, 0.1]
+    model = [0.5, 0.25, 0.25]
+    q_i = [0.7, 0.3, 0.1]
+    experiment1 = Experiment(num_states, num_actions, num_steps, num_mc_runs, model_i, model, q_i)
     experiment1.run()
 
 
