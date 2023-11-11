@@ -5,21 +5,89 @@ import random
 
 from matplotlib import pyplot as plt
 
-# Preparation phase
-num_states = 2
-num_actions = 2
 
-num_stop_states = 2
-num_stop_actions = 2
+class FPD_Stop_PE:
 
+    def __init__(self, num_states: int, num_actions: int, horizon: int, ideal_s: np.ndarray, ideal_a: np.ndarray,
+                 w: int, mu: int) -> None:
+        """
+        Initialize an evaluation process of FPD with stopping using PE
+        :param num_states:
+        :param num_actions:
+        :param horizon:
+        :param ideal_s: set of ideal states
+        :param ideal_a: set o ideal actions
+        :param w: weight of importance between actions and states
+        :param mu: selecting exploring parameter
+        """
+        self.num_states, self.num_actions = num_states, num_actions
+        self.horizon = horizon
+        self.ideal_s, self.ideal_a = ideal_s, ideal_a
+        self.w, self.mu = w, mu
+        self.h = np.ones((2, num_states, horizon))
+        self.d = np.ones(2, num_actions, 2, num_states, horizon)
+        self.r_io = np.ones((2, num_actions, 2, num_states, horizon))
+        self.r_o = np.ones((2, num_actions, 2, num_states, horizon))
+        self.model = self.generate_model()
+        self.model_short = self.generate_short_model()
 
-SEED = 10
-dim = [num_states, num_actions, num_states]
+    def generate_model(self):
+        pass
 
-# Let's say that state 2 is more preferable than state 1
+    def generate_short_model(self):
+        """
+        Generates short model of the environment
+        :return:
+        """
+        random.seed(seed=2, version=2)
+        help_matrix = np.ones((self.num_states, self.num_actions, self.num_actions))
+        for i in range(self.num_states):
+            for j in range(self.num_actions):
+                for k in range(self.num_states):
+                    help_matrix[i, j, k] = random.random()
 
-q_ideal = [0.1, 0.9]
+        for o in range(self.num_actions):
+            for p in range(self.num_states):
+                help_matrix[:, o, p] = help_matrix[:, o, p] / np.sum(help_matrix[:, o, p])
+        self.model_short = help_matrix
 
+    def evaluate_FPD(self) -> None:
+        """
+        Evaluates all values of FPD
+        :return:
+        """
+        rho = np.ones((self.num_actions, 2, self.num_states, 2))
+        for t in np.arange(self.horizon, 0, -1):
+            rho, lam = self.evaluate_rho()
+            for s in range(self.num_states):
+                for s_s in range(2):
+                    rho_max = np.max(rho[:,:,s,s_s])
+            self.evaluate_d(rho, rho_max)
+            self.evaluate_mio()
+            self.evaluate_rio()
+            self.evaluate_h()
+            self.evaluate_ro()
+
+    def evaluate_rho(self) -> (np.ndarray, np.ndarray):
+        """
+        Evaluate rho
+        :return:
+        """
+        rho = np.ones((self.num_actions, 2, self.num_states, 2))
+        lam = np.ones((self.num_actions, self.num_states))
+        for a in range(self.num_actions):
+            for a_s in range(2):
+                for s in range(self.num_states):
+                    for s_s in range(2):
+                        rho[a, a_s, s, s_s] = self.ideal_s*self.model[:, :, a, a_s, s, s_s] + self.ideal_a*self.w
+                        lam[a, s] = np.sum(self.model_short[:, a, s]**2)
+        return rho, lam
+
+    def char_2D_fun(arr: np.ndarray)->np.ndarray:
+    """
+    Characteristic function for 2D
+    """
+    pass
 
 def initialize_transition_matrix(seed: int) -> np.ndarray:
     """
@@ -79,13 +147,14 @@ t = t_init
 model_matrix = random_matrix
 
 id_dec = np.random.uniform(size=(num_states, num_actions), low=0, high=1)
-id_dec[0] = id_dec[0]/np.sum(id_dec[0])
-id_dec[1] = id_dec[1]/np.sum(id_dec[1])
+id_dec[0] = id_dec[0] / np.sum(id_dec[0])
+id_dec[1] = id_dec[1] / np.sum(id_dec[1])
 # print("id_dec")
 # print(id_dec)
 
 print("trans matrix")
 print(trans_matrix)
+
 
 def ideal_decision(action: int, prev_state: int) -> float:
     # TODO fill some correct form of ideal decision rule
@@ -160,7 +229,7 @@ def ideal_decision_rule(action: int, stop_action: int, prev_state: int,
     :return: one value based on inputs
     """
     first_element = ideal_decision(action, prev_state) if stop_action == 1 \
-        else 1/num_actions
+        else 1 / num_actions
     # as else value we used uniform action selection
     if prev_stop_state == 0:
         second_element = 1 if stop_action == 0 else 0
@@ -171,7 +240,7 @@ def ideal_decision_rule(action: int, stop_action: int, prev_state: int,
     return final_output
 
 
-def h_fun(time: int, state: int, stop_state: int) -> float: #or maybe -> np.ndarray?
+def h_fun(time: int, state: int, stop_state: int) -> float:  # or maybe -> np.ndarray?
     """
     Calculates h function values based on previous d function values and ideal decision rule
     :param time:
@@ -183,7 +252,7 @@ def h_fun(time: int, state: int, stop_state: int) -> float: #or maybe -> np.ndar
     for i in range(num_actions):
         for stop in range(num_stop_actions):
             output += ideal_decision_rule(i, stop, state, stop_state) * \
-                      np.exp(-d_storage[time+1, i, stop, state, stop_state])
+                      np.exp(-d_storage[time + 1, i, stop, state, stop_state])
     return output
 
 
@@ -211,7 +280,7 @@ def d_fun(time: int, action: int, stop_action: int, prev_state: int, prev_stop_s
             if model == 0:
                 output += 0
             else:
-                output += model*np.log(model/(id_mod*h_storage[time, i, stop]))
+                output += model * np.log(model / (id_mod * h_storage[time, i, stop]))
     fun_output = output
     return fun_output
 
@@ -224,7 +293,7 @@ def optimal_policy(num_actions: int, num_stop_actions: int, num_states: int, num
                    d_stored: np.ndarray) -> np.ndarray:
     t_len = np.shape(h_stored)[0]
     opt_policy = np.zeros((t_len, num_actions, num_stop_actions, num_states, num_stop_states))
-    for t in range(t_len-1, -1, -1):
+    for t in range(t_len - 1, -1, -1):
         for action in range(num_actions):
             for stop_action in range(num_stop_actions):
                 for state in range(num_states):
@@ -236,7 +305,6 @@ def optimal_policy(num_actions: int, num_stop_actions: int, num_states: int, num
     return opt_policy
 
 
-
 # Script phase/Testing phase
 print("trans matrix")
 print(trans_matrix)
@@ -245,7 +313,8 @@ for t_ind in range(t_init, -1, -1):
     if t_ind != t_init:
         for state in range(num_states):
             for stop_state in range(num_stop_states):
-                h_storage[t_ind, state, stop_state] = h_fun(t_ind, state, stop_state) # h_fun(t_ind+1, state, stop_state)
+                h_storage[t_ind, state, stop_state] = h_fun(t_ind, state,
+                                                            stop_state)  # h_fun(t_ind+1, state, stop_state)
 
     # range(start, stop, step)
     for action in range(num_actions):
@@ -257,14 +326,13 @@ for t_ind in range(t_init, -1, -1):
 
     print(" \n new t_ind = ", t_ind, "\n")
 
-    #print(h_storage[t_ind])
-    #print(d_storage[t_ind])
+    # print(h_storage[t_ind])
+    # print(d_storage[t_ind])
 
 print("h_storage is: ")
 print(h_storage)
 print("d_storage is: ")
 print(d_storage)
-
 
 print("OPTIMAL POLICY EVALUATION")
 opt_policy = optimal_policy(num_actions, num_stop_actions, num_states, num_stop_states, h_storage, d_storage)
@@ -276,19 +344,9 @@ for action in range(num_actions):
     for stop_action in range(num_stop_actions):
         for state in range(num_states):
             for stop_state in range(num_stop_states):
-                # print(action, stop_action, state, stop_state)
-                # print(ideal_decision_rule(action, stop_action, state, stop_state))
                 id_dec_rule[action, stop_action, state, stop_state] = ideal_decision_rule(action, stop_action, state,
                                                                                           stop_state)
 print(id_dec_rule)
-
-# Zda se ze ideal_decision_rule funguje spravne
-# print("Checking state and stop_state")
-# print(id_dec_rule[:, :, 0, 1])
-# print(h_storage)
-
-
-# auxiliary part
 
 
 def aux_d(action: int, prev_state: int) -> float:
@@ -304,39 +362,5 @@ def aux_d(action: int, prev_state: int) -> float:
             if model == 0:
                 output += 0
             else:
-                output += model*np.log(model/id_mod)
+                output += model * np.log(model / id_mod)
     return output
-
-
-# h_out = np.zeros((2, 2))
-# for state in range(num_states):
-#     for stop_state in range(num_stop_states):
-#         for action in range(num_actions):
-#             for stop_action in range(num_stop_actions):
-#                 id_dr = ideal_decision_rule(action, stop_action, state, stop_state)
-#                 # print(id_dr)
-#                 # print(d_storage[-1, action, stop_action, state, stop_state])
-#                 h_out[state, stop_state] += id_dr * np.exp(-d_storage[-1, action, stop_action, state, stop_state])
-# print(h_out)
-
-a = 0
-
-# print("d as from theory:")
-# for action in range(num_actions):
-#     for prev_state in range(num_states):
-#         print(aux_d(action, prev_state))
-#
-# print("model_matrix")
-# print(model_matrix)
-# print("real matrix")
-# print(trans_matrix)
-
-
-
-
-
-
-
-
-
-

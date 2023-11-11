@@ -2,6 +2,8 @@ import numpy as np
 from random import choices
 import random
 
+from numpy import ndarray
+
 # Auxiliary vectors $v_{\M{a}}$ and $v_{\M{n}}$
 NEIGHBOUR_VECTOR = [1, 1, 1, 1, 1, 3, 9, 2, 1]
 AGENT_VECTOR = [1, 2, 9, 3, 1, 1, 1, 1, 1]
@@ -12,13 +14,13 @@ SEED = 10
 NUM_STATES = 3
 NUM_ACTIONS = 4
 dim = [NUM_STATES, NUM_ACTIONS, NUM_STATES]
-history = [0, 0]
+history = [0, 0, 0]
 HISTORY = np.array(history, dtype=int)
 
 
 class Environment:
 
-    def __init__(self, num_states, num_actions):
+    def __init__(self, num_states, num_actions, seed):
         """
         Init an Environment representing unknown model consisting of transition matrix and
         history influencing upcoming state
@@ -30,73 +32,49 @@ class Environment:
         """
         self.num_states = num_states
         self.num_actions = num_actions
-        self.transition_matrix = self.initialize_transition_matrix(SEED)
-        self.history = self.initialize_history()
+        self.transition_matrix = self.initialize_transition_matrix(seed)
         self.time = 0
 
-    @staticmethod
-    def initialize_transition_matrix(seed: int) -> np.ndarray:
+    def initialize_transition_matrix(self, seed: int) -> np.ndarray:
         """
-        Initialize transition matrix.
-        This matrix uniquely determines the environment.
+        Initialize transition matrix of the Environment/system.
+        This matrix is generated pseudorandomly using specified seed value.
+        :param seed: seed for randomly generated matrix
+        :returns self.transition_matrix
         """
         random.seed(seed, version=2)
-        help_matrix = np.ones((dim[0], dim[1], dim[2]))
-        for i in range(dim[0]):
-            for j in range(dim[1]):
-                for k in range(dim[2]):
+        help_matrix = np.zeros((self.num_states, self.num_actions, self.num_states))
+        for i in range(self.num_states):
+            for j in range(self.num_actions):
+                for k in range(self.num_states):
                     help_matrix[i, j, k] = random.random()
         # Section responsible for normalization
-        for o in range(dim[1]):
-            for p in range(dim[2]):
+        for o in range(self.num_actions):
+            for p in range(self.num_states):
                 help_matrix[:, o, p] = help_matrix[:, o, p] / np.sum(help_matrix[:, o, p])
         return help_matrix
 
-    @staticmethod
-    def initialize_history() -> np.ndarray:
+    def generate_state(self, cur_action: int, prev_state: int) -> int:
         """
-        Initialize history of the environment.
-        This history influences generating upcoming state.
+        Generates new state according to the transition probability matrix and
+        previously observed action and state
         """
-        return HISTORY
-
-    def generate_state(self) -> int:
-        """
-        Generates  new state according to the transition probability matrix and
-        history (previously observed actions and states)
-        """
-        probabilities = self.transition_matrix[:, self.history[1], self.history[0]]
+        probabilities = self.transition_matrix[:, cur_action, prev_state]
         self.time += 1
         new_state = np.random.choice([s for s in range(self.num_states)], 1, p=probabilities)[0]
-        self.history[0] = new_state
         return new_state
-
-    def obtain_action(self, action: int):
-        """
-        Update the history array with new action
-        :param action: newly performed action
-        :return:
-        """
-        self.history[1] = action
 
 
 class BaseAgent:
 
-    def __init__(self):
+    def __init__(self, num_states: int, num_actions: int):
         """
         Initialize agent class without information fusion.
         """
+        self.num_states, self.num_actions = num_states, num_actions
         self.occurrence_table = self.initialize_prior_occurrence_table()
-        self.num_states, self.num_actions = self.occurrence_table.shape[0], self.occurrence_table.shape[1]
         self.stop_ind = 1
         self.history = HISTORY
-
-    @staticmethod
-    def initialize_prior_occurrence_table() -> np.ndarray:
-        """
-        Initialize prior occurrence table $V_{o}$.
-        """
-        return np.random.randint(1, 3, size=(dim[0], dim[1], dim[2]))
 
     def update_occurrence_table(self, new_state: int) -> None:
         """
@@ -107,11 +85,12 @@ class BaseAgent:
 
     def generate_action(self) -> int:
         """
-        Generates new action
+        Generates new action and remember it
         :return: return new action
         """
         # TODO: Some more robust/clever solution
         new_action = np.random.choice([a for a in range(self.num_actions)], 1)[0]
+        self.history[1] = new_action
         return new_action
 
     def make_prediction(self):
@@ -125,3 +104,9 @@ class BaseAgent:
         predicted_state = np.random.choice([a for a in range(self.num_states)], 1, p=probabilities)[0]
         # predicted_state = np.max(probabilities) # state with highest probability
         return predicted_state
+
+    def initialize_prior_occurrence_table(self) -> np.ndarray:
+        """
+        Initialize prior occurrence table $V_{o}$.
+        """
+        return np.random.randint(1, 3, size=(self.num_states, self.num_actions, self.num_actions))

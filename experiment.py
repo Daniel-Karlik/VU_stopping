@@ -13,7 +13,7 @@ SEED = 1
 class Experiment:
 
     def __init__(self, num_states: int, num_actions: int,
-                 num_steps: int, num_mc_runs: int) -> None:
+                 num_steps: int, num_mc_runs: int, seed: int) -> None:
         """
         Initialize experiment.
         """
@@ -21,6 +21,7 @@ class Experiment:
         self.num_actions = num_actions
         self.num_steps = num_steps
         self.num_mc_runs = num_mc_runs
+        self.seed = seed
 
     def _get_averaged_kld(self) -> np.ndarray:
         """
@@ -36,7 +37,7 @@ class Experiment:
         Run experiment.
         """
         for i in range(self.num_mc_runs):
-            mcs = MonteCarloSimulation(self.num_states, self.num_actions, self.num_steps)
+            mcs = MonteCarloSimulation(self.num_states, self.num_actions, self.num_steps, self.seed)
             mcs.perform_single_run()
 
     def plot_results(self, results: Dict[float, np.ndarray]) -> None:
@@ -68,14 +69,14 @@ class Experiment:
 
 class MonteCarloSimulation:
 
-    def __init__(self, num_states: int, num_actions: int, num_steps: int) -> None:
+    def __init__(self, num_states: int, num_actions: int, num_steps: int, seed: int) -> None:
         """
         Initialize a single Monte Carlo simulation.
         """
         self.num_states, self.num_actions = num_states, num_actions
         self.num_steps = num_steps
-        self.environment = Environment(self.num_states, self.num_actions)
-        self.agent = BaseAgent()
+        self.environment = Environment(self.num_states, self.num_actions, seed)
+        self.agent = BaseAgent(self.num_states, self.num_actions)
         self.prediction_table = np.zeros((num_steps+1, 2), dtype=int)
 
     def perform_single_run(self) -> np.ndarray:
@@ -85,7 +86,8 @@ class MonteCarloSimulation:
         for step in range(self.num_steps):
             # We make prediction before observing new state
             predicted_state = self.agent.make_prediction()
-            observable_state = self.environment.generate_state()
+            observable_state = self.environment.generate_state(self.agent.history[1], self.agent.history[0])
+            self.agent.history[0] = observable_state
             action = self.agent.generate_action()
             self.agent.update_occurrence_table(observable_state)
             self.store_pred(observable_state, predicted_state)
@@ -117,7 +119,6 @@ class MonteCarloSimulation:
         :return:
         """
         self.prediction_table[self.environment.time, :] = [predicted_state, observable_state]
-
 
     @staticmethod
     def _to_probabilities(occurrences: np.ndarray) -> np.ndarray:
