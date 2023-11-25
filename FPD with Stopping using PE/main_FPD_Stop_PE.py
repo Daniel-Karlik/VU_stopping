@@ -5,6 +5,7 @@ import pandas as pd
 import matplotlib.pyplot as plt
 from Environment import Environment, BaseAgent
 from experiment import Experiment
+from FPD_Stop_PE import FPD_Stop_PE
 
 # Defining the task
 num_states = 5
@@ -14,8 +15,8 @@ num_mc_runs = 10
 seed = 10
 
 # function experiment
-experiment1 = Experiment(num_states, num_actions, num_steps, num_mc_runs, seed)
-experiment1.run()
+#experiment1 = Experiment(num_states, num_actions, num_steps, num_mc_runs, seed)
+#experiment1.run()
 
 # FPD with Stopping using PE
 num_states = 2
@@ -26,5 +27,7 @@ ideal_a = np.array([0, 1])
 w = 1
 mu = 1
 
-experiment2 = Experiment_FPD(num_states, num_actions, horizon, ideal_s, ideal_a, w, mu)
+experiment2 = FPD_Stop_PE(num_states, num_actions, horizon, ideal_s, ideal_a, w, mu)
+experiment2.evaluate_FPD()
 
+print(experiment2.h)
