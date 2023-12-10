@@ -10,7 +10,7 @@ from matplotlib import pyplot as plt
 class FPD_Stop_PE:
 
     def __init__(self, num_states: int, num_actions: int, horizon: int, ideal_s: np.ndarray, ideal_a: np.ndarray,
-                 w: int, mu: int) -> None:
+                 w: np.float, mu: np.float) -> None:
         """
         Initialize an evaluation process of FPD with stopping using PE
         :param num_states:
@@ -95,6 +95,7 @@ class FPD_Stop_PE:
             self.normalize_r_io()
             self.evaluate_h()
             self.evaluate_r_o()
+            self.normalize_r_o()
             self.t = t - 1
 
     def evaluate_r_o(self) -> None:
@@ -102,8 +103,8 @@ class FPD_Stop_PE:
             for a_s in range(2):
                 for s in range(self.num_states):
                     for s_s in range(2):
-                        self.r_o[a, a_s, s, s_s, self.t] = (-(self.mu + 1) * self.d[a, a_s, s, s_s, self.t]) / self.h[
-                            s, s_s, self.t - 1]
+                        self.r_o[a, a_s, s, s_s, self.t] = np.exp(-(self.mu + 1) * self.d[a, a_s, s, s_s, self.t]) / \
+                                                           self.h[s, s_s, self.t - 1]
 
     def evaluate_h(self) -> None:
         """
@@ -113,7 +114,7 @@ class FPD_Stop_PE:
         for s in range(self.num_states):
             for s_s in range(2):
                 self.h[s, s_s, self.t - 1] = np.sum(np.sum(self.r_io[:, :, s, s_s, self.t] * np.exp(
-                            -self.d[:, :, s, s_s, self.t]), axis=0), axis=0)
+                    -self.d[:, :, s, s_s, self.t]), axis=0), axis=0)
 
     def evaluate_r_io(self) -> None:
         for a in range(self.num_actions):
@@ -137,8 +138,17 @@ class FPD_Stop_PE:
         for s in range(self.num_states):
             for s_s in range(2):
                 self.r_io[:, :, s, s_s, self.t] = self.r_io[:, :, s, s_s, self.t] / np.sum(
-                            self.r_io[:, :, s, s_s, self.t])
+                    self.r_io[:, :, s, s_s, self.t])
 
+    def normalize_r_o(self):
+        """
+        Normalizes r_o
+        :return:
+        """
+        for s in range(self.num_states):
+            for s_s in range(2):
+                self.r_o[:, :, s, s_s, self.t] = self.r_o[:, :, s, s_s, self.t] / np.sum(
+                    self.r_o[:, :, s, s_s, self.t])
     def evaluate_m_io(self, lam: np.ndarray) -> None:
         """
         If self.model_short is non-uniform, then...
@@ -219,3 +229,154 @@ class FPD_Stop_PE:
                     for ss_s in range(2):
                         aux_d[a, a_s, ss, ss_s] = max(0, np.max(aux_d[:, :, ss, ss_s]))
         return aux_d
+
+
+class Agent:
+
+    def __init__(self, ss: int, aa: int, horizon: np.int, w: int, s0: int, nu: int, si: int, ai: np.ndarray,
+                 alfa: np.ndarray,
+                 sigma: int) -> None:
+        self.num_states, self.num_actions = num_states, num_actions
+        self.horizon = horizon
+        self.r_io = np.ones((num_actions, 2, num_states, 2, horizon))
+        self.r_o = np.ones((num_actions, 2, num_states, 2, horizon))
+        self.model = np.ones((self.num_states, 2, self.num_actions, 2, self.num_states, 2)) / (self.num_states * 2)
+        self.generate_model()
+        self.t = t
+        # TODO: Is this shape OK?
+        self.alpha = 1.2 * np.ones((num_actions, 2, num_states, 2))
+        self.m_io = np.ones((num_states, 2, num_actions, 2, num_states, 2)) / (num_states * 2)
+        self.ss = ss
+        self.aa = aa
+        self.horizon = horizon
+        self.w = w
+        self.s0 = s0
+        self.nu = nu
+        self.si = si
+        self.ai = ai
+        self.model = self.create_model()
+        self.mi = np.ones((self.ss, self.aa, self.ss)) / self.ss
+        self.ri = np.ones((self.aa, self.ss)) / self.aa
+        self.r = np.ones((self.aa, self.ss)) / self.aa
+        self.V = np.ones((self.ss, self.aa, self.ss))
+
+    def create_model(self):
+
+        model = np.ones(tuple([self.ss, self.aa, self.ss], ))
+
+        for s1 in range(self.ss):
+            for a in range(self.aa):
+                for s2 in range(self.ss):
+                    model[s2, a, s1] = np.exp(-(s2 - s1 - a) ** 2 / (2 * self.sigma ** 2))
+
+        model = self.normalize_proba_model(model)
+
+        return model
+
+    def normalize_proba_model(self, model):
+        for s1 in range(self.ss):
+            for a in range(self.aa):
+                model[:, a, s1] = model[:, a, s1] / np.sum(model[:, a, s1])
+
+        return model
+
+    def learn(self, data2):
+        s = data2.states[data2.t]
+        a = data2.actions[data2.t - 1]
+        s1 = data2.states[data2.t - 1]
+        self.V[s.astype(np.int64), a.astype(np.int64), s1.astype(np.int64)] = self.V[s.astype(np.int64), a.astype(
+            np.int64), s1.astype(np.int64)] + 1
+
+        self.model[:, a.astype(np.int64), s1.astype(np.int64)] = self.V[:, a.astype(np.int64),
+                                                                 s1.astype(np.int64)] / np.sum(
+            self.V[:, a.astype(np.int64), s1.astype(np.int64)])
+
+    def opt_mi(self, a, s1):
+
+        for s in range(self.ss):
+            self.mi[s, a, s1] = self.model[s, a, s1] * np.exp(-self.alfa[a, s1] * self.model[s, a, s1])
+
+    def opt_mio(self, a, s1, o):
+
+        for s in range(self.ss):
+            self.mi[s, a, s1] = np.exp(-self.alfa[a, s1] * o[s, a, s1])
+
+    def opt_ri(self, s1, d):
+        for a in range(self.aa):
+            self.ri[a, s1] = np.exp(-self.nu * d[a, s1])
+
+        self.ri[:, s1] = self.ri[:, s1] / np.sum(self.ri[:, s1])
+
+    def opt_function(self, alfa_var, lambda_var, a, s1, r_side):
+        l_side = alfa_var * lambda_var[a, s1] + np.log(
+            np.sum(self.model[:, a, s1] * np.exp(-alfa_var * self.model[:, a, s1])))
+        f = l_side - r_side
+
+        return f
+
+    def opto_function(self, alfa_var, a, s1, r_side, o):
+        l_side = np.log(np.sum(np.exp(-alfa_var * o[:, a, s1])) / self.ss)
+
+        f = l_side - r_side
+
+        return f
+
+    def calculate_alfa(self):
+        lambda_var = np.zeros((self.aa, self.ss))
+        rho = np.zeros((self.aa, self.ss))
+        rho_max = np.zeros(self.ss)
+        for s1 in range(self.ss):
+            for a in range(self.aa):
+                lambda_var[a, s1] = np.sum(self.model[:, a, s1] ** 2)
+                rho[a, s1] = np.sum(self.model[self.si, a, s1])
+                if np.any(self.ai == a):
+                    rho[a, s1] = (1 - self.w) * rho[a, s1] + self.w
+                if rho[a, s1] >= rho_max[s1]:
+                    rho_max[s1] = rho[a, s1]
+
+        for tau in range(self.h, 0, -1):
+            d = np.zeros((self.aa, self.ss))
+            d_opt = np.zeros((self.aa, self.ss))
+            d_help = np.zeros(self.ss)
+            for s1 in range(self.ss):
+                var = np.zeros(self.aa)
+                for a in range(self.aa):
+                    var[a] = np.sum(self.model[:, a, s1] * np.log(rho[a, s1] / (rho_max[s1] * self.gam[:])))
+
+                    if d_help[s1] < var[a]:
+                        d_help[s1] = var[a]
+                if d_help[s1] < 0:
+                    d_help[s1] = 0
+
+                for a in range(self.aa):
+                    d_opt[a, s1] = d_help[s1] + np.log(rho_max[s1] / rho[a, s1])
+                    if np.sum(self.model[:, a, s1] != np.ones(self.ss)) > 0:
+                        r_side = d_opt[a, s1] + np.sum(self.model[:, a, s1] * np.log(self.gam[:]))
+
+                        alfaa = self.alfa[a, s1]
+                        alfaa = fsolve(self.opt_function, alfaa, args=(lambda_var, a, s1, r_side))
+                        self.alfa[a, s1] = alfaa
+                        self.opt_mi(a, s1)
+                    else:
+                        o = np.ones((self.ss, self.aa, self.ss))
+                        o[self.ss, :, :] = - (self.ss - 1) * o[self.ss, self.aa, self.ss]
+                        o = o / self.aa
+
+                        r_side = d_opt[a, s1] + np.sum(
+                            self.model[:, a, s1] * np.log((self.gam[:] * rho_max[s1]) / rho[a, s1]))
+
+                        alfaa = self.alfa[a, s1]
+                        alfaa = fsolve(self.opto_function, alfaa, args=(lambda_var, a, s1, r_side, o))
+                        self.alfa[a, s1] = alfaa
+                        self.opt_mio(a, s1, o)
+
+                for a in range(self.aa):
+                    self.mi[:, a, s1] = self.mi[:, a, s1] / np.sum(self.mi[:, a, s1])
+
+                for a in range(self.aa):
+                    d[a, s1] = np.sum(
+                        self.model[:, a, s1] * np.log(self.model[:, a, s1] / (self.gam[:] * self.mi[:, a, s1])))
+
+                self.opt_ri(s1, d_opt)
+                self.gam[s1] = np.sum(self.ri[:, s1] * np.exp(-d_opt[:, s1]))
+                self.r[:, s1] = (self.ri[:, s1] * np.exp(-d_opt[:, s1])) / self.gam[s1]
