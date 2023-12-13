@@ -65,10 +65,12 @@ def generate_data(num_data, ss, aa):
 # FPD with Stopping using PE
 num_states = 11
 num_actions = 5
-num_steps = 200
+num_steps = 100
 horizon = 1000
-ideal_s = np.array([[5, 0], [6, 0], [7, 0], [1, 1], [2, 1], [3, 1]])
-ideal_a = np.array([3, 0])
+#ideal_s = np.array([[5, 0], [6, 0], [7, 0], [1, 1], [2, 1], [3, 1]])
+#ideal_a = np.array([3, 0])
+ideal_s = np.array([5, 6, 7])
+ideal_a = np.array([3, 4])
 w = 1.0
 mu = 1.0
 
@@ -87,7 +89,7 @@ mu = 1.0
 #number_data = 10000
 #V = generate_data(number_data, 11, num_actions)
 #print(V)
-
+short_horizon = 50
 experiment3 = Experiment(num_states, num_actions, num_steps, num_mc_runs, horizon, ideal_s, ideal_a, w, mu)
 experiment3.run()
 

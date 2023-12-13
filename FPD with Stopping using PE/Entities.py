@@ -10,55 +10,31 @@ class Agent:
         self.horizon = horizon
         self.ideal_s, self.ideal_a = ideal_s, ideal_a
         self.w, self.mu = w, mu
-        self.h = np.ones((num_states, 2, horizon))
-        self.d = np.ones((num_actions, 2, num_states, 2, horizon))
-        self.r_io = np.ones((num_actions, 2, num_states, 2, horizon))
+        self.h = np.ones((num_states, horizon))
+        self.d = np.ones((num_actions, num_states, horizon))
+        self.r_io = np.ones((num_actions, num_states, horizon))
         self.t = horizon - 1
-        self.r_o = np.ones((num_actions, 2, num_states, 2, horizon))/(self.num_actions*2)
+        self.r_o = np.ones((num_actions, num_states, horizon)) / self.num_actions
         self.init_r_o()
-        self.model = np.ones((self.num_states, 2, self.num_actions, 2, self.num_states, 2)) / (self.num_states * 2)
-        self.init_model()
-        self.V = np.ones((num_states, 2, num_actions, 2, num_states, 2))
+        self.model = np.ones((self.num_states, self.num_actions, self.num_states)) / self.num_states
+        # self.init_model()
+        self.V = np.ones((num_states, num_actions, num_states))
         self.continues = 1
-        self.history = np.array([[1, 1], [1, 1]])
+        self.history = np.array([1, 1])
+        self.stop_time = horizon
         # TODO: Is this shape OK?
         # self.alpha = 1.2 * np.ones((num_actions, 2, num_states, 2))
         # self.m_io = np.ones((num_states, 2, num_actions, 2, num_states, 2)) / (num_states * 2)
 
     def init_r_o(self):
-        for a in range(self.num_actions):
-            for a_s in range(2):
-                for ss in range(self.num_states):
-                    for ss_s in range(2):
-                        if ss_s != a_s:
-                            self.r_o[a, a_s, ss, ss_s, self.t] = 0
-                        else:
-                            self.r_o[a, a_s, ss, ss_s, self.t] = 1
         for ss in range(self.num_states):
-            for ss_s in range(2):
-                self.r_o[:, :, ss, ss_s, self.t] = self.r_o[:, :, ss, ss_s, self.t] / (np.sum(
-                    np.sum(self.r_o[:, :, ss, ss_s, self.t], axis=0), axis=0))
+            self.r_o[:, ss, self.t] = self.r_o[:, ss, self.t] / np.sum(self.r_o[:, ss, self.t])
 
     def init_model(self):
         for s in range(self.num_states):
-            for s_s in range(2):
-                for a in range(self.num_actions):
-                    for a_s in range(2):
-                        for ss in range(self.num_states):
-                            for ss_s in range(2):
-                                if s_s == 0:
-                                    self.model[s, s_s, a, a_s, ss, ss_s] = 1 if s == ss else 0
-                                elif s_s != a_s or a_s != ss_s:
-                                    self.model[s, s_s, a, a_s, ss, ss_s] = 0
-                                else:
-                                    self.model[s, s_s, a, a_s, ss, ss_s] = 1
-
-        for a in range(self.num_actions):
-            for a_s in range(2):
-                for s in range(self.num_states):
-                    for s_s in range(2):
-                        self.model[:, :, a, a_s, s, s_s] = self.model[:, :, a, a_s, s, s_s] / (np.sum(
-                            np.sum(self.model[:, :, a, a_s, s, s_s], axis=0), axis=0))
+            for a in range(self.num_actions):
+                for ss in range(self.num_states):
+                    self.model[s, a, ss] = 1
 
     def update_V(self, observed_state: np.int, observed_action: np.int, prev_state: np.int):
         """
@@ -69,69 +45,63 @@ class Agent:
         :return:
         """
         if self.continues == 1:
-            self.V[observed_state, 1, observed_action, 1, prev_state, 1] += 1
-        else:
-            self.V[observed_state, 0, observed_action, 0, prev_state, 0] += 1
-        #self.history[0, 0] = observed_action
+            self.V[observed_state, observed_action, prev_state] += 1
+        # self.history[0, 0] = observed_action
 
     def estimate_model(self) -> None:
         for a in range(self.num_actions):
-            for a_s in range(2):
-                for s in range(self.num_states):
-                    for s_s in range(2):
-                        self.V[:, :, a, a_s, s, s_s] = self.V[:, :, a, a_s, s, s_s] / (np.sum(
-                            np.sum(self.V[:, :, a, a_s, s, s_s], axis=0), axis=0))
+            for s in range(self.num_states):
+                self.model[:, a, s] = self.V[:, a, s] / np.sum(self.V[:, a, s])
 
-    def stop(self):
+    def stop(self, time: int):
+        self.stop_time = time
+        print("Stopped at time: ", time)
         self.continues = 0
 
     def predict_state(self, history) -> np.int:
         # If the process continues we generate actions normally otherwise randomly
-        if self.continues == 1:
-            prob_cont = (self.model[:, 1, history[0, 0], 1, history[1, 0], 1])/(np.sum(self.model[:, 1, history[0, 0], 1, history[1, 0], 1]))
-            #state = np.random.choice(np.arange(self.num_states), 1, p=prob_cont)[0]
-            state = prob_cont.argmax(axis=0)
-            #state = np.random.choice(np.arange(2*self.num_states), 1, p=self.model[:, :, history[0, 0], 1, history[1, 0], 1].ravel())[0]
-            # we have flattened 2D probability and we need to predict state and stop_state
-            #predicted_state = np.array([(state - (state % 2))/2, state % 2])
-            predicted_state = np.array([state, 1])
-        else:
-            state = history[1, 0]
-            #state = np.random.choice([s for s in range(self.num_states)], 1)[0]
-            predicted_state = np.array([state, 0])
-        return predicted_state
+        prob_cont = (self.model[:, history[0], history[1]]) / (np.sum(self.model[:, history[0], history[1]]))
+        state = np.random.choice(np.arange(self.num_states), 1, p=prob_cont)[0]
+        # state = prob_cont.argmax(axis=0)
+        return state
 
     def generate_action(self, observed_state, time) -> int:
         """
         Generates new action and remember it
         :return: return new action
         """
+        # TODO q prob of continuing estimation
+        q = 1 - 1 / ((self.num_states ** 2) * self.num_actions)
         if self.continues == 1:
-            action = np.random.choice(np.arange(2 * self.num_actions), 1,  p=self.r_o[:, :, observed_state, 1, self.t].ravel())[0]
+            action = np.random.choice(np.arange(self.num_actions), 1, p=self.r_o[:, observed_state, self.t])[0]
             # we have flattened 2D probability and we need to predict state and stop_state
-            new_action = np.array([(action - (action % 2)) / 2, action % 2])
+            stop_action = np.random.choice([0, 1], 1, p=[1 - q, q])[0]
+            new_action = np.array([action, stop_action])
         else:
-            action = np.random.choice([a for a in range(self.num_actions)], 1)[0]
+            # action = np.random.choice([a for a in range(self.num_actions)], 1)[0]
+            action = np.random.choice(np.arange(self.num_actions), 1, p=self.r_o[:, observed_state, self.t])[0]
             new_action = np.array([action, 0])
-        #self.history[0, :] = new_action
+        # self.history[0, :] = new_action
         # We dont stop too early
         if time < 30:
             new_action[1] = 1
-        if new_action[1] == 0:
-            self.stop()
-        return new_action
+        if self.continues == 1 and new_action[1] == 0:
+            self.stop(time)
+        return action
 
     def evaluate_FPD(self) -> None:
         """
         Evaluates all values of FPD
         :return:
         """
-        rho = np.ones((self.num_actions, 2, self.num_states, 2))
+        rho = np.ones((self.num_actions, self.num_states))
+        self.t = self.horizon - 1
         for t in np.arange(self.horizon, 0, -1):
+            if np.isnan(self.r_o[3, 5, self.t]):
+                a = "here"
             rho, lam = self.evaluate_rho()
             for s in range(self.num_states):
-                for s_s in range(2):
-                    rho_max = np.max(np.max(rho[:, :, s, s_s], axis=1), axis=0)
+                rho_max = np.max(rho[:, s])
             self.evaluate_d(rho, rho_max)
             # self.evaluate_m_io(lam)
             self.evaluate_r_io()
@@ -143,11 +113,9 @@ class Agent:
 
     def evaluate_r_o(self) -> None:
         for a in range(self.num_actions):
-            for a_s in range(2):
-                for s in range(self.num_states):
-                    for s_s in range(2):
-                        self.r_o[a, a_s, s, s_s, self.t] = np.exp(-(self.mu + 1) * self.d[a, a_s, s, s_s, self.t]) / \
-                                                           self.h[s, s_s, self.t - 1]
+            for s in range(self.num_states):
+                self.r_o[a, s, self.t] = np.exp(-(self.mu + 1) * self.d[a, s, self.t]) / \
+                                         self.h[s, self.t - 1]
 
     def evaluate_h(self) -> None:
         """
@@ -155,23 +123,18 @@ class Agent:
         :return:
         """
         for s in range(self.num_states):
-            for s_s in range(2):
-                self.h[s, s_s, self.t - 1] = np.sum(np.sum(self.r_io[:, :, s, s_s, self.t] * np.exp(
-                    -self.d[:, :, s, s_s, self.t]), axis=0), axis=0)
+            self.h[s, self.t - 1] = np.sum(self.r_io[:, s, self.t] * np.exp(-self.d[:, s, self.t]))
+                                    #/ np.max(np.sum(self.r_io[:, s, self.t] * np.exp(-self.d[:, s, self.t])))
 
     def evaluate_r_io(self) -> None:
         for a in range(self.num_actions):
-            for a_s in range(2):
-                for s in range(self.num_states):
-                    for s_s in range(2):
-                        self.r_io[a, a_s, s, s_s, self.t] = np.exp(-self.mu * self.d[a, a_s, s, s_s, self.t])
+            for s in range(self.num_states):
+                self.r_io[a, s, self.t] = np.exp(-self.mu * self.d[a, s, self.t])
+                                          #/ np.max(np.exp(-self.mu * self.d[a, s, self.t]))
 
         for a in range(self.num_actions):
-            for a_s in range(2):
-                for s in range(self.num_states):
-                    for s_s in range(2):
-                        self.r_io[a, a_s, s, s_s, self.t] = self.r_io[a, a_s, s, s_s, self.t] / (np.sum(
-                            np.sum(self.r_io[:, :, s, s_s, self.t], axis=0), axis=0))
+            for s in range(self.num_states):
+                self.r_io[a, s, self.t] = self.r_io[a, s, self.t] / np.sum(self.r_io[:, s, self.t])
 
     def normalize_r_io(self):
         """
@@ -179,9 +142,7 @@ class Agent:
         :return:
         """
         for s in range(self.num_states):
-            for s_s in range(2):
-                self.r_io[:, :, s, s_s, self.t] = self.r_io[:, :, s, s_s, self.t] / np.sum(
-                    self.r_io[:, :, s, s_s, self.t])
+            self.r_io[:, s, self.t] = self.r_io[:, s, self.t] / np.sum(self.r_io[:, s, self.t])
 
     def normalize_r_o(self):
         """
@@ -189,9 +150,7 @@ class Agent:
         :return:
         """
         for s in range(self.num_states):
-            for s_s in range(2):
-                self.r_o[:, :, s, s_s, self.t] = self.r_o[:, :, s, s_s, self.t] / np.sum(
-                    self.r_o[:, :, s, s_s, self.t])
+            self.r_o[:, s, self.t] = self.r_o[:, s, self.t] / np.sum(self.r_o[:, s, self.t])
 
     def evaluate_m_io(self, lam: np.ndarray) -> None:
         """
@@ -199,45 +158,41 @@ class Agent:
         :return:
         """
         for a in range(self.num_actions):
-            for a_s in range(2):
-                for s in range(self.num_states):
-                    for s_s in range(2):
-                        # TODO: solve if I need long d or short d HERE
-                        r_side = self.d[a, a_s, s, s_s, self.t] + np.sum(np.sum(
-                            self.model[:, :, a, a_s, s, s_s] * np.log(self.h[:, :, self.t]), axis=1), axis=0)
-                        alpha = self.alpha[a, a_s, s, s_s]
-                        # l_side = alpha * lam[a, ss] + np.log(np.sum(self.model[:, a, ss] * np.exp(-alpha * self.model[:, a, ss])))
-                        alpha = fsolve(self.opt_function, alpha, args=(lam, a, a_s, s, s_s, r_side))
-                        self.alpha[a, a_s, s, s_s] = alpha
-                        for s1 in range(self.num_states):
-                            for s_s1 in range(2):
-                                self.m_io[s1, s_s1, a, a_s, s, s_s] = np.exp(
-                                    -self.alpha[a, a_s, s, s_s] * self.model[s1, s_s1, a, a_s, s, s_s])
+            for s in range(self.num_states):
+                # TODO: solve if I need long d or short d HERE
+                r_side = self.d[a, s, self.t] + np.sum(
+                    self.model[:, a, s] * np.log(self.h[:, self.t]))
+                alpha = self.alpha[a, s]
+                # l_side = alpha * lam[a, ss] + np.log(np.sum(self.model[:, a, ss] * np.exp(-alpha * self.model[:, a, ss])))
+                alpha = fsolve(self.opt_function, alpha, args=(lam, a, s, r_side))
+                self.alpha[a, s] = alpha
+                for s1 in range(self.num_states):
+                    self.m_io[s1, a, s] = np.exp(-self.alpha[a, s] * self.model[s1, a, s])
 
     def evaluate_rho(self) -> (np.ndarray, np.ndarray):
         """
         Evaluate rho
         :return:
         """
-        rho = np.ones((self.num_actions, 2, self.num_states, 2))
-        lam = np.ones((self.num_actions, 2, self.num_states, 2))
+        rho = np.ones((self.num_actions, self.num_states))
+        lam = np.ones((self.num_actions, self.num_states))
         for a in range(self.num_actions):
-            for a_s in range(2):
-                for s in range(self.num_states):
-                    for s_s in np.arange(2):
-                        ideal_s_model = self.indicator_function(self.ideal_s, self.model[:, :, a, a_s, s, s_s])
-                        rho[a, a_s, s, s_s] = np.sum(np.sum(ideal_s_model + self.ideal_a * self.w, axis=1), axis=0)
-                        lam[a, a_s, s, s_s] = np.sum(np.sum(self.model[:, :, a, a_s, s, s_s] ** 2, axis=1), axis=0)
-                        #print(a, a_s, s, s_s)
+            for s in range(self.num_states):
+                ideal_s_model = self.indicator_function(self.ideal_s, self.model[:, a, s])
+                aux_a = np.zeros((self.num_actions))
+                for vec in self.ideal_a:
+                    if vec == a: aux_a[a] = 1
+                rho[a, s] = np.sum(ideal_s_model) + aux_a[a] * self.w
+                lam[a, s] = np.sum(self.model[:, a, s] ** 2)
+                # print(a, a_s, s, s_s)
         return rho, lam
 
     def indicator_function(self, vectors: np.ndarray, arr: np.ndarray) -> np.ndarray:
         aux_arr = np.zeros((np.shape(arr)))
         for vec in range(np.shape(vectors)[0]):
             for i in range(np.shape(arr)[0]):
-                for j in range(np.shape(arr)[1]):
-                    if i == vectors[vec, 0] and vectors[vec, 1] == j:
-                        aux_arr[i, j] = arr[i, j]
+                if i == vectors[vec]:
+                    aux_arr[i] = arr[i]
         return aux_arr
 
     def evaluate_d(self, rho: np.ndarray, rho_max: np.ndarray) -> None:
@@ -247,15 +202,16 @@ class Agent:
         :param rho_max:
         :return:
         """
-        d_max = np.ones((np.shape(self.d)))
+        d_max = np.ones((np.shape(self.d)[0], np.shape(self.d)[1]))
         d_max = self.aux_d(rho, rho_max)
-        self.d[:, :, :, :, self.t] = d_max + np.log(rho_max / rho)
+        self.d[:, :, self.t] = d_max + np.log(rho_max / rho)
+        # alla normalizace aby to nedavalo prilis male r_io a r_o
+        self.d[:, :, self.t] = self.d[:, :, self.t]/np.max(self.d[:, :, self.t])
 
-    def opt_function(self, alpha: np.array, lam: np.array, a: int, a_s: int, s: int, s_s: int,
+    def opt_function(self, alpha: np.array, lam: np.array, a: int, s: int,
                      r_side: np.array) -> np.array:
-        l_side = alpha * lam[a, a_s, s, s_s] + np.log(
-            np.sum(np.sum(self.model[:, :, a, a_s, s, s_s] * np.exp(-alpha * self.model[:, :, a, a_s, s, s_s]),
-                          axis=1), axis=0))
+        l_side = alpha * lam[a, s] + np.log(
+            np.sum(self.model[:, a, s] * np.exp(-alpha * self.model[:, a, s])))
         f = l_side - r_side
         return f
 
@@ -267,20 +223,15 @@ class Agent:
         :param t:
         :return:
         """
-        aux_d = np.zeros((self.num_actions, 2, self.num_states, 2))
+        aux_d = np.zeros((self.num_actions, self.num_states))
         for s in range(self.num_states):
-            for s_s in range(2):
-                for a in range(self.num_actions):
-                    for a_s in range(2):
-                        for ss in range(self.num_states):
-                            for ss_s in range(2):
-                                aux_d[a, a_s, ss, ss_s] += np.sum(self.model[s, s_s, a, a_s, ss, ss_s] * np.log(
-                                    rho[a, a_s, ss, ss_s] / (self.h[s, s_s, self.t] * rho_max)))
-        for a in range(self.num_actions):
-            for a_s in range(2):
+            for a in range(self.num_actions):
                 for ss in range(self.num_states):
-                    for ss_s in range(2):
-                        aux_d[a, a_s, ss, ss_s] = max(0, np.max(aux_d[:, :, ss, ss_s]))
+                    aux_d[a, ss] += np.sum(self.model[s, a, ss] * np.log(
+                        rho[a, ss] / (self.h[s, self.t] * rho_max)))
+        for a in range(self.num_actions):
+            for ss in range(self.num_states):
+                aux_d[a, ss] = max(0, np.max(aux_d[:, ss]))
         return aux_d
 
 
@@ -319,14 +270,8 @@ class Environment:
                 V[:, at, s1] = V[:, at, s1] / np.sum(V[:, at, s1])
         return V
 
-    def generate_state(self, action, stop_action, state, stop_state, past_history) -> np.int:
+    def generate_state(self, action, prev_state, stop_state, past_history) -> np.int:
         # TODO: Create some model
-        obs_state = np.zeros((2))
-        if stop_action == 1 and stop_state == 1:
-            obs_state[0] = np.random.choice(np.arange(self.num_states), 1, p=self.model[:, action, state])[0]
-            #obs_state[1] = np.random.choice([0, 1], 1, p=[0.05, 0.95])[0]
-            obs_state[1] = 1
-        else:
-            obs_state[0] = state
-            obs_state[1] = 0
+        # obs_state = np.zeros(1)
+        obs_state = np.random.choice(np.arange(self.num_states), 1, p=self.model[:, action, prev_state])[0]
         return obs_state.astype(int)

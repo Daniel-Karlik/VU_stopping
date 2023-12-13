@@ -24,8 +24,8 @@ class Experiment:
         self.mu = mu
         # If we know the model of the Environment in advance e.g. we did population research
         self.known_model = 1
-        self.d_storage = np.zeros((self.horizon, self.num_actions, 2, self.num_states, 2, num_mc_runs))
-        self.h_storage = np.zeros((self.horizon, self.num_states, 2, num_mc_runs))
+        self.d_storage = np.zeros((self.horizon, self.num_actions, self.num_states, num_mc_runs))
+        self.h_storage = np.zeros((self.horizon, self.num_states, num_mc_runs))
         h_init = 1
         self.h_storage[-1] = h_init
         self.state_sequence = np.zeros((num_mc_runs, horizon))
@@ -46,6 +46,10 @@ class Experiment:
                                        self.w, self.mu, self.known_model, self.horizon)
             mcs.perform_single_run()
             mcs.print_errors()
+
+            mcs2 = MonteCarloSimulation(self.num_states, self.num_actions, self.num_steps, self.ideal_s, self.ideal_a,
+                                       self.w, self.mu, self.known_model, self.horizon)
+            mcs2.perform_free_run()
             # errors = mcs.error_compute()
             # print(errors)
 
@@ -78,7 +82,7 @@ class MonteCarloSimulation:
         self.num_states, self.num_actions = num_states, num_actions
         self.num_steps = num_steps
         self.known_model = known_model
-        self.history = np.zeros((2, 2), dtype=int)
+        self.history = np.zeros(2, dtype=int)
         seed = 2
         self.ideal_s, self.ideal_a = ideal_s, ideal_a
         self.w, self.mu = w, mu
@@ -86,8 +90,8 @@ class MonteCarloSimulation:
         self.agent = Agent(self.num_states, self.num_actions, self.horizon, self.ideal_s, self.ideal_a, self.w, self.mu)
         self.system = Environment(self.num_states, self.num_actions)
         self.errors = np.zeros((horizon, 1))
-        self.predicted_states = np.zeros((horizon + 1, 2), dtype=int)
-        self.states = np.zeros((horizon + 1, 2), dtype=int)
+        self.predicted_states = np.zeros((horizon + 1), dtype=int)
+        self.states = np.zeros((horizon + 1), dtype=int)
         self.init_history()
 
 
@@ -98,10 +102,28 @@ class MonteCarloSimulation:
         """
         # history[0,:] = [action, stop_action]
         # history[1,:] = [state, stop_state]
-        history = np.zeros((2, 2), dtype=int)
+        history = np.zeros(2, dtype=int)
         self.history = self.agent.history
         #return history
 
+    def perform_free_run(self):
+        """
+        Perform a single run without learning and any preference
+        :return:
+        """
+        for step in range(self.horizon):
+            # estimation phase
+            current_state = self.system.generate_state(self.history[0], self.history[1], 0, 0)
+            self.states[step] = current_state
+            self.history[1] = current_state
+            # store errors
+            self.history[0] = np.random.choice([a for a in range(self.num_actions)], 1)[0]
+
+        bin_edges = np.arange(-0.5, 10.5, 1)
+        plt.hist(self.states, bins=bin_edges)
+        plt.xticks(np.arange(0, 11, 1))
+        plt.title("Free_run")
+        plt.show()
     def perform_single_run(self):
         """
         Perform a single run for the given number of decision steps and return some error plots.
@@ -113,23 +135,22 @@ class MonteCarloSimulation:
         for step in range(self.horizon):
             # estimation phase
             pred_state = self.agent.predict_state(self.history)
-            self.predicted_states[step, :] = pred_state
-            current_state = self.system.generate_state(self.history[0, 0], self.history[0, 1], self.history[1, 0],
-                                                       self.history[1, 1], 0)
-            self.states[step, :] = current_state
-            self.history[1, :] = current_state
+            self.predicted_states[step] = pred_state
+            current_state = self.system.generate_state(self.history[0], self.history[1], 0, 0)
+            self.states[step] = current_state
+            self.history[1] = current_state
             # store errors
-            self.errors[step] = np.abs(pred_state[0] - current_state[0])
-            self.agent.update_V(current_state[0], self.history[0, 0], self.history[1, 0])
-            self.history[0, :] = self.agent.generate_action(current_state[0], step)
+            self.errors[step] = np.abs(pred_state - current_state)
+            self.agent.update_V(current_state, self.history[0], self.history[1])
+            self.history[0] = self.agent.generate_action(current_state, step)
+
             self.agent.history = self.history
-            if self.history[1, 1] == 0:
-                self.agent.stop()
-            self.agent.estimate_model()
-            if (step % self.num_steps == (self.num_steps - 1)) and self.agent.continues == 1:
-                #self.agent.estimate_model()
-                self.agent.evaluate_FPD()
-            self.agent.t = self.horizon - 1
+            if self.agent.continues == 1:
+                self.agent.estimate_model()
+                if (step % self.num_steps == (self.num_steps - 1)) and self.agent.continues == 1:
+                    #self.agent.estimate_model()
+                    self.agent.evaluate_FPD()
+                self.agent.t = self.horizon - 1
             #if self.agent.continues == 0:
                 #self.fill_rest()
 
@@ -145,10 +166,16 @@ class MonteCarloSimulation:
             # self.agent.update_history(action, observable_state)
             # self.environment.update_history(action, observable_state)
             # self.store_pred(observable_state, predicted_state)
+        print(self.agent.stop_time)
         print("Predicted states: ")
         print(self.predicted_states)
         print("Observed states: ")
         print(self.states)
+        bin_edges = np.arange(-0.5, 10.5, 1)
+        plt.hist(self.states, bins=bin_edges)
+        plt.xticks(np.arange(0, 11, 1))
+        plt.title("Controlled run")
+        plt.show()
 
     def print_errors(self):
         print(np.sum(self.errors))
