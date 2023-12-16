@@ -23,8 +23,16 @@ class Agent:
         self.history = np.array([1, 1])
         self.stop_time = horizon
         # TODO: Is this shape OK?
-        # self.alpha = 1.2 * np.ones((num_actions, 2, num_states, 2))
-        # self.m_io = np.ones((num_states, 2, num_actions, 2, num_states, 2)) / (num_states * 2)
+        self.alpha = 1.2 * np.ones((num_actions, num_states))
+        self.m_io = np.ones((num_states, num_actions, num_states)) / num_states
+        self.m_io_long = np.ones((num_states, 2, num_actions, 2, num_states, 2)) / (num_states * 2)
+        self.model_long = np.ones((num_states, 2, num_actions, 2, num_states, 2)) / (num_states * 2)
+        self.dec_rule = np.ones((num_actions, 2, num_states, 2)) / (num_actions * 2)
+        self.stop_rule = np.ones((2, num_states, 2)) / 2
+        self.ideal_stop_rule = np.ones((2, num_states, 2)) / 2
+        self.init_ideal_stop_rule()
+        self.h_long = np.ones((num_states, 2, horizon))
+        self.d_io_long = np.zeros((num_actions, 2, num_states, 2, horizon))
 
     def init_r_o(self):
         for ss in range(self.num_states):
@@ -35,6 +43,16 @@ class Agent:
             for a in range(self.num_actions):
                 for ss in range(self.num_states):
                     self.model[s, a, ss] = 1
+
+    def init_ideal_stop_rule(self):
+        q = 0.8
+        for s_s in range(2):
+            for s in range(self.num_states):
+                for a_s in range(2):
+                    if s_s == 0:
+                        self.ideal_stop_rule[a_s, :, s_s] = 1 if a_s == s_s else 0
+                    else:
+                        self.ideal_stop_rule[a_s, :, s_s] = q if a_s == s_s else 1 - q
 
     def update_V(self, observed_state: np.int, observed_action: np.int, prev_state: np.int):
         """
@@ -53,9 +71,8 @@ class Agent:
             for s in range(self.num_states):
                 self.model[:, a, s] = self.V[:, a, s] / np.sum(self.V[:, a, s])
 
-    def stop(self, time: int):
-        self.stop_time = time
-        print("Stopped at time: ", time)
+    def stop(self):
+        print("Stopped at time: ", self.horizon - self.t)
         self.continues = 0
 
     def predict_state(self, history) -> np.int:
@@ -86,7 +103,7 @@ class Agent:
         if time < 30:
             new_action[1] = 1
         if self.continues == 1 and new_action[1] == 0:
-            self.stop(time)
+            self.stop()
         return action
 
     def evaluate_FPD(self) -> None:
@@ -109,25 +126,87 @@ class Agent:
             self.normalize_r_o()
             self.t = t - 1
 
-    def evaluate_FPD_floating_horizon(self, floating_horizon: np.int, init: bool) -> None:
+    def evaluate_PE(self) -> None:
         """
-        Evaluates all values of FPD
+
         :return:
         """
-        rho = np.ones((self.num_actions, self.num_states))
-        self.t = self.horizon - 1
-        for t in np.arange(self.horizon, 0, -1):
-            rho, lam = self.evaluate_rho()
-            for s in range(self.num_states):
-                rho_max = np.max(rho[:, s])
-            self.evaluate_d(rho, rho_max)
-            # self.evaluate_m_io(lam)
-            self.evaluate_r_io()
-            self.normalize_r_io()
-            self.evaluate_h()
-            self.evaluate_r_o()
-            self.normalize_r_o()
-            self.t = t - 1
+        rho, lam = self.evaluate_rho()
+        for s in range(self.num_states):
+            rho_max = np.max(rho[:, s])
+        self.evaluate_d(rho, rho_max)
+        self.evaluate_m_io(lam)
+        self.evaluate_r_io()
+        self.normalize_r_io()
+        self.evaluate_h()
+        # self.evaluate_r_o()
+        # self.normalize_r_o()
+        # self.t = self.t - 1
+
+    def evaluate_FPD_Stop(self):
+        """
+
+        :return:
+        """
+        self.evaluate_long_d_io()
+        self.evaluate_long_h()
+        self.evaluate_long_r_o()
+
+    def evaluate_long_d_io(self):
+        for a in range(self.num_actions):
+            for a_s in range(2):
+                for s in range(self.num_states):
+                    for s_s in range(2):
+                        # These forms are analytically obtained when designed formulas are insert into the extended theorem
+                        if s_s == 0:
+                            self.d_io_long[a, a_s, s, s_s, self.t] = 0
+                        elif s_s == 1 and a_s == 0:
+                            self.d_io_long[a, a_s, s, s_s, self.t] = 0
+                        else:
+                            for ss in range(self.num_states):
+                                self.d_io_long[a, a_s, s, s_s, self.t] += self.model[ss, a, s] * np.log(
+                                    self.model[ss, a, s] / (self.m_io[ss, a, s] * self.h_long[ss, 1, self.t]))
+        if np.max(self.d_io_long[:, :, :, :, self.t]) > 0:
+            self.d_io_long[:, :, :, :, self.t] = self.d_io_long[:, :, :, :, self.t] - np.max(self.d_io_long[:, :, :, :, self.t])
+        else:
+            self.d_io_long[:, :, :, :, self.t] = self.d_io_long[:, :, :, :, self.t] + np.max(np.abs(self.d_io_long[:, :, :, :, self.t]))
+
+    def evaluate_long_h(self):
+        aux_h = np.zeros((self.num_states, 2))
+        for s in range(self.num_states):
+            for s_s in range(2):
+                if s_s == 0:
+                    self.h_long[:, s_s, self.t - 1] = 1
+                else:
+                    for a in range(self.num_actions):
+                        for a_s in range(2):
+                            aux_h[s, s_s] += self.r_io[a, s, self.t] * self.ideal_stop_rule[a_s, s, s_s] * np.exp(
+                                -self.d_io_long[a, a_s, s, s_s, self.t])
+                    self.h_long[s, s_s, self.t - 1] = aux_h[s, s_s]
+
+    def evaluate_long_r_o(self):
+        for a in range(self.num_actions):
+            for a_s in range(2):
+                for s in range(self.num_states):
+                    for s_s in range(2):
+                        self.dec_rule[a, a_s, s, s_s] = self.r_io[a, s, self.t] * self.ideal_stop_rule[a_s, s, s_s] * np.exp(
+                            -self.d_io_long[a, a_s, s, s_s, self.t]) / self.h_long[s, s_s, self.t - 1]
+
+    def stop_decision(self) -> np.int:
+
+        # marginalizace pravdepodobnosti
+        p_action = np.sum(self.dec_rule[:, :, self.history[1], self.continues], axis=1)
+        p_stop = np.sum(self.dec_rule[:, :, self.history[1], self.continues], axis=0)
+        action = np.random.choice(np.arange(self.num_actions), 1, p=p_action)[0]
+        stop_action = np.random.choice(np.arange(2), 1, p=p_stop)[0]
+        # Pokud nezastavime drive zastavime pri dosahnuti horizontu
+        if self.t == 1:
+            action = np.random.choice(np.arange(self.num_actions), 1, p=p_action)[0]
+            stop_action = 0
+        if stop_action == 0:
+            self.stop()
+        self.t = self.t - 1
+        return action
 
     def evaluate_r_o(self) -> None:
         for a in range(self.num_actions):
@@ -142,13 +221,13 @@ class Agent:
         """
         for s in range(self.num_states):
             self.h[s, self.t - 1] = np.sum(self.r_io[:, s, self.t] * np.exp(-self.d[:, s, self.t]))
-                                    #/ np.max(np.sum(self.r_io[:, s, self.t] * np.exp(-self.d[:, s, self.t])))
+            # / np.max(np.sum(self.r_io[:, s, self.t] * np.exp(-self.d[:, s, self.t])))
 
     def evaluate_r_io(self) -> None:
         for a in range(self.num_actions):
             for s in range(self.num_states):
                 self.r_io[a, s, self.t] = np.exp(-self.mu * self.d[a, s, self.t])
-                                          #/ np.max(np.exp(-self.mu * self.d[a, s, self.t]))
+                # / np.max(np.exp(-self.mu * self.d[a, s, self.t]))
 
         for a in range(self.num_actions):
             for s in range(self.num_states):
@@ -185,7 +264,12 @@ class Agent:
                 alpha = fsolve(self.opt_function, alpha, args=(lam, a, s, r_side))
                 self.alpha[a, s] = alpha
                 for s1 in range(self.num_states):
-                    self.m_io[s1, a, s] = np.exp(-self.alpha[a, s] * self.model[s1, a, s])
+                    self.m_io[s1, a, s] = self.model[s1, a, s] * np.exp(-self.alpha[a, s] * self.model[s1, a, s])
+
+        for a in range(self.num_actions):
+            for s in range(self.num_states):
+                self.m_io[:, a, s] = self.m_io[:, a, s] / np.sum(self.m_io[:, a, s])
+
 
     def evaluate_rho(self) -> (np.ndarray, np.ndarray):
         """
@@ -223,8 +307,8 @@ class Agent:
         d_max = np.ones((np.shape(self.d)[0], np.shape(self.d)[1]))
         d_max = self.aux_d(rho, rho_max)
         self.d[:, :, self.t] = d_max + np.log(rho_max / rho)
-        # alla normalizace aby to nedavalo prilis male r_io a r_o
-        self.d[:, :, self.t] = self.d[:, :, self.t]/np.max(self.d[:, :, self.t])
+        # alla normalizace aby to nedavalo prilis male r_io a r_o, reseni numerickych omezeni
+        self.d[:, :, self.t] = self.d[:, :, self.t] - np.max(self.d[:, :, self.t])
 
     def opt_function(self, alpha: np.array, lam: np.array, a: int, s: int,
                      r_side: np.array) -> np.array:

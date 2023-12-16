@@ -42,14 +42,18 @@ class Experiment:
         # Calculating and saving optimal_policy
         # self.plot_opt_policy(self.num_steps - 10, self.num_steps, opt_policy)
         for i in range(self.num_mc_runs):
-            mcs = MonteCarloSimulation(self.num_states, self.num_actions, self.num_steps, self.ideal_s, self.ideal_a,
-                                       self.w, self.mu, self.known_model, self.horizon)
-            mcs.perform_single_run()
-            mcs.print_errors()
+            #mcs = MonteCarloSimulation(self.num_states, self.num_actions, self.num_steps, self.ideal_s, self.ideal_a,
+            #                           self.w, self.mu, self.known_model, self.horizon)
+            #mcs.perform_single_run()
+            #mcs.print_errors()
 
             mcs2 = MonteCarloSimulation(self.num_states, self.num_actions, self.num_steps, self.ideal_s, self.ideal_a,
                                        self.w, self.mu, self.known_model, self.horizon)
             mcs2.perform_free_run()
+
+            mcs3 = MonteCarloSimulation(self.num_states, self.num_actions, self.num_steps, self.ideal_s, self.ideal_a,
+                                       self.w, self.mu, self.known_model, self.horizon)
+            mcs3.perform_single_dynamic_run()
             # errors = mcs.error_compute()
             # print(errors)
 
@@ -75,7 +79,7 @@ class Experiment:
 
 class MonteCarloSimulation:
 
-    def __init__(self, num_states, num_actions, num_steps, ideal_s, ideal_a, w, mu, known_model, horizon) -> None:
+    def __init__(self, num_states, num_actions, num_steps, ideal_s, ideal_a, w, mu, known_model, horizon, len_sim=100) -> None:
         """
         Initialize a single Monte Carlo simulation.
         """
@@ -87,11 +91,12 @@ class MonteCarloSimulation:
         self.ideal_s, self.ideal_a = ideal_s, ideal_a
         self.w, self.mu = w, mu
         self.horizon = horizon
+        self.len_sim = len_sim
         self.agent = Agent(self.num_states, self.num_actions, self.horizon, self.ideal_s, self.ideal_a, self.w, self.mu)
         self.system = Environment(self.num_states, self.num_actions)
-        self.errors = np.zeros((horizon, 1))
-        self.predicted_states = np.zeros((horizon + 1), dtype=int)
-        self.states = np.zeros((horizon + 1), dtype=int)
+        self.errors = np.zeros((len_sim, 1))
+        self.predicted_states = np.zeros((len_sim + 1), dtype=int)
+        self.states = np.zeros((len_sim + 1), dtype=int)
         self.init_history()
 
 
@@ -119,11 +124,11 @@ class MonteCarloSimulation:
             # store errors
             self.history[0] = np.random.choice([a for a in range(self.num_actions)], 1)[0]
 
-        bin_edges = np.arange(-0.5, 10.5, 1)
-        plt.hist(self.states, bins=bin_edges)
-        plt.xticks(np.arange(0, 11, 1))
-        plt.title("Free_run")
-        plt.show()
+        #bin_edges = np.arange(-0.5, 10.5, 1)
+        #plt.hist(self.states, bins=bin_edges)
+        #plt.xticks(np.arange(0, 11, 1))
+        #plt.title("Free_run")
+        #plt.show()
     def perform_single_run(self):
         """
         Perform a single run for the given number of decision steps and return some error plots.
@@ -166,15 +171,51 @@ class MonteCarloSimulation:
             # self.agent.update_history(action, observable_state)
             # self.environment.update_history(action, observable_state)
             # self.store_pred(observable_state, predicted_state)
-        print(self.agent.stop_time)
-        print("Predicted states: ")
-        print(self.predicted_states)
+        #print(self.agent.stop_time)
+        #print("Predicted states: ")
+        #print(self.predicted_states)
+        #print("Observed states: ")
+        #print(self.states)
+        #bin_edges = np.arange(-0.5, 10.5, 1)
+        #plt.hist(self.states, bins=bin_edges)
+        #plt.xticks(np.arange(0, 11, 1))
+        #plt.title("Controlled run")
+        #plt.show()
+
+    def perform_single_dynamic_run(self):
+        """
+        Perform a single run for the given number of decision steps and return some error plots.
+        """
+        stop_action = 1
+        stop_state = 1
+        prev_stop = 1
+        action = 0
+        for step in range(self.len_sim):
+            # estimation phase
+            current_state = self.system.generate_state(self.history[0], self.history[1], 0, 0)
+            self.states[step] = current_state
+            self.history[1] = current_state
+            # store errors
+            self.agent.update_V(current_state, self.history[0], self.history[1])
+            self.agent.estimate_model()
+            self.agent.t = self.horizon - 1
+            self.agent.h[:, :] = 1
+            self.agent.h_long[:, :, :] = 1
+            while self.agent.continues > 0:
+                self.agent.evaluate_PE()
+                self.agent.evaluate_FPD_Stop()
+                action = self.agent.stop_decision()
+            self.agent.continues = 1
+            # We end DM cycle if horizon time is reached or if we stopped DM before
+            self.history[0] = action
+            self.agent.history = self.history
+
         print("Observed states: ")
         print(self.states)
         bin_edges = np.arange(-0.5, 10.5, 1)
         plt.hist(self.states, bins=bin_edges)
         plt.xticks(np.arange(0, 11, 1))
-        plt.title("Controlled run")
+        plt.title("Controlled dynamic run")
         plt.show()
 
     def perform_single_run_floating_horizon(self, floating_horizon: np.int, init: bool = False):
