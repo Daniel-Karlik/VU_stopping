@@ -97,8 +97,26 @@ class Agent:
         rho = np.ones((self.num_actions, self.num_states))
         self.t = self.horizon - 1
         for t in np.arange(self.horizon, 0, -1):
-            if np.isnan(self.r_o[3, 5, self.t]):
-                a = "here"
+            rho, lam = self.evaluate_rho()
+            for s in range(self.num_states):
+                rho_max = np.max(rho[:, s])
+            self.evaluate_d(rho, rho_max)
+            # self.evaluate_m_io(lam)
+            self.evaluate_r_io()
+            self.normalize_r_io()
+            self.evaluate_h()
+            self.evaluate_r_o()
+            self.normalize_r_o()
+            self.t = t - 1
+
+    def evaluate_FPD_floating_horizon(self, floating_horizon: np.int, init: bool) -> None:
+        """
+        Evaluates all values of FPD
+        :return:
+        """
+        rho = np.ones((self.num_actions, self.num_states))
+        self.t = self.horizon - 1
+        for t in np.arange(self.horizon, 0, -1):
             rho, lam = self.evaluate_rho()
             for s in range(self.num_states):
                 rho_max = np.max(rho[:, s])

@@ -177,6 +177,29 @@ class MonteCarloSimulation:
         plt.title("Controlled run")
         plt.show()
 
+    def perform_single_run_floating_horizon(self, floating_horizon: np.int, init: bool = False):
+        stop_action = 1
+        stop_state = 1
+        prev_stop = 1
+        action = 0
+        for step in range(self.horizon):
+            # estimation phase
+            pred_state = self.agent.predict_state(self.history)
+            self.predicted_states[step] = pred_state
+            current_state = self.system.generate_state(self.history[0], self.history[1], 0, 0)
+            self.states[step] = current_state
+            self.history[1] = current_state
+            # store errors
+            self.errors[step] = np.abs(pred_state - current_state)
+            self.agent.update_V(current_state, self.history[0], self.history[1])
+            self.history[0] = self.agent.generate_action(current_state, step)
+
+            self.agent.history = self.history
+            if self.agent.continues == 1:
+                self.agent.estimate_model()
+                self.agent.evaluate_FPD_floating_horizon(floating_horizon, init)
+        #self.agent.t = self.horizon - 1
+
     def print_errors(self):
         print(np.sum(self.errors))
 
