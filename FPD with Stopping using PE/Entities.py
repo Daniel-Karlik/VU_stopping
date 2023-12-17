@@ -72,7 +72,7 @@ class Agent:
                 self.model[:, a, s] = self.V[:, a, s] / np.sum(self.V[:, a, s])
 
     def stop(self):
-        print("Stopped at time: ", self.horizon - self.t)
+        # print("Stopped at time: ", self.horizon - self.t)
         self.continues = 0
 
     def predict_state(self, history) -> np.int:
@@ -166,10 +166,10 @@ class Agent:
                             for ss in range(self.num_states):
                                 self.d_io_long[a, a_s, s, s_s, self.t] += self.model[ss, a, s] * np.log(
                                     self.model[ss, a, s] / (self.m_io[ss, a, s] * self.h_long[ss, 1, self.t]))
-        if np.max(self.d_io_long[:, :, :, :, self.t]) > 0:
-            self.d_io_long[:, :, :, :, self.t] = self.d_io_long[:, :, :, :, self.t] - np.max(self.d_io_long[:, :, :, :, self.t])
-        else:
-            self.d_io_long[:, :, :, :, self.t] = self.d_io_long[:, :, :, :, self.t] + np.max(np.abs(self.d_io_long[:, :, :, :, self.t]))
+        #if np.max(self.d_io_long[:, :, :, :, self.t]) > 0:
+        #    self.d_io_long[:, :, :, :, self.t] = self.d_io_long[:, :, :, :, self.t] - np.max(self.d_io_long[:, :, :, :, self.t])
+        #else:
+        #    self.d_io_long[:, :, :, :, self.t] = self.d_io_long[:, :, :, :, self.t] + np.max(np.abs(self.d_io_long[:, :, :, :, self.t]))
 
     def evaluate_long_h(self):
         aux_h = np.zeros((self.num_states, 2))
@@ -197,6 +197,10 @@ class Agent:
         # marginalizace pravdepodobnosti
         p_action = np.sum(self.dec_rule[:, :, self.history[1], self.continues], axis=1)
         p_stop = np.sum(self.dec_rule[:, :, self.history[1], self.continues], axis=0)
+        has_nan1 = np.isnan(p_action)
+        has_nan2 = np.isnan(p_stop)
+        if np.any(has_nan1) or np.any(has_nan2):
+            print("Problem")
         action = np.random.choice(np.arange(self.num_actions), 1, p=p_action)[0]
         stop_action = np.random.choice(np.arange(2), 1, p=p_stop)[0]
         # Pokud nezastavime drive zastavime pri dosahnuti horizontu
@@ -308,7 +312,12 @@ class Agent:
         d_max = self.aux_d(rho, rho_max)
         self.d[:, :, self.t] = d_max + np.log(rho_max / rho)
         # alla normalizace aby to nedavalo prilis male r_io a r_o, reseni numerickych omezeni
-        self.d[:, :, self.t] = self.d[:, :, self.t] - np.max(self.d[:, :, self.t])
+        # self.d[:, :, self.t] = self.d[:, :, self.t] - np.max(self.d[:, :, self.t])
+        if np.max(self.d[:, :, self.t]) > 0:
+            self.d[:, :, self.t] = self.d[:, :, self.t] - np.max(self.d[:, :, self.t])
+        else:
+            self.d[:, :, self.t] = self.d[:, :, self.t] + np.max(np.abs(self.d[:, :, self.t]))
+
 
     def opt_function(self, alpha: np.array, lam: np.array, a: int, s: int,
                      r_side: np.array) -> np.array:

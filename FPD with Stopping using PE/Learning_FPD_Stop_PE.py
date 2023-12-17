@@ -47,9 +47,9 @@ class Experiment:
             #mcs.perform_single_run()
             #mcs.print_errors()
 
-            mcs2 = MonteCarloSimulation(self.num_states, self.num_actions, self.num_steps, self.ideal_s, self.ideal_a,
-                                       self.w, self.mu, self.known_model, self.horizon)
-            mcs2.perform_free_run()
+            #mcs2 = MonteCarloSimulation(self.num_states, self.num_actions, self.num_steps, self.ideal_s, self.ideal_a,
+            #                           self.w, self.mu, self.known_model, self.horizon)
+            #mcs2.perform_free_run()
 
             mcs3 = MonteCarloSimulation(self.num_states, self.num_actions, self.num_steps, self.ideal_s, self.ideal_a,
                                        self.w, self.mu, self.known_model, self.horizon)
@@ -79,7 +79,7 @@ class Experiment:
 
 class MonteCarloSimulation:
 
-    def __init__(self, num_states, num_actions, num_steps, ideal_s, ideal_a, w, mu, known_model, horizon, len_sim=100) -> None:
+    def __init__(self, num_states, num_actions, num_steps, ideal_s, ideal_a, w, mu, known_model, horizon, len_sim=500) -> None:
         """
         Initialize a single Monte Carlo simulation.
         """

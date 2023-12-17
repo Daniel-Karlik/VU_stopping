@@ -12,7 +12,7 @@ from Learning_FPD_Stop_PE import Experiment
 num_states = 5
 num_actions = 7
 num_steps = 10
-num_mc_runs = 3
+num_mc_runs = 20
 seed = 10
 
 # function experiment
