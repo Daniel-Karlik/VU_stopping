@@ -42,9 +42,9 @@ class Experiment:
         # Calculating and saving optimal_policy
         # self.plot_opt_policy(self.num_steps - 10, self.num_steps, opt_policy)
         for i in range(self.num_mc_runs):
-            #mcs = MonteCarloSimulation(self.num_states, self.num_actions, self.num_steps, self.ideal_s, self.ideal_a,
-            #                           self.w, self.mu, self.known_model, self.horizon)
-            #mcs.perform_single_run()
+            mcs = MonteCarloSimulation(self.num_states, self.num_actions, self.num_steps, self.ideal_s, self.ideal_a,
+                                       self.w, self.mu, self.known_model, self.horizon)
+            mcs.perform_single_run()
             #mcs.print_errors()
 
             #mcs2 = MonteCarloSimulation(self.num_states, self.num_actions, self.num_steps, self.ideal_s, self.ideal_a,
@@ -52,7 +52,7 @@ class Experiment:
             #mcs2.perform_free_run()
 
             mcs3 = MonteCarloSimulation(self.num_states, self.num_actions, self.num_steps, self.ideal_s, self.ideal_a,
-                                       self.w, self.mu, self.known_model, self.horizon)
+                                        self.w, self.mu, self.known_model, self.horizon)
             mcs3.perform_single_dynamic_run()
             # errors = mcs.error_compute()
             # print(errors)
@@ -133,31 +133,24 @@ class MonteCarloSimulation:
         """
         Perform a single run for the given number of decision steps and return some error plots.
         """
-        stop_action = 1
-        stop_state = 1
-        prev_stop = 1
-        action = 0
-        for step in range(self.horizon):
+        for step in range(self.len_sim):
             # estimation phase
-            pred_state = self.agent.predict_state(self.history)
-            self.predicted_states[step] = pred_state
             current_state = self.system.generate_state(self.history[0], self.history[1], 0, 0)
             self.states[step] = current_state
             self.history[1] = current_state
             # store errors
-            self.errors[step] = np.abs(pred_state - current_state)
             self.agent.update_V(current_state, self.history[0], self.history[1])
-            self.history[0] = self.agent.generate_action(current_state, step)
-
+            self.agent.estimate_model()
+            self.agent.t = self.horizon - 1
+            self.agent.h[:, :] = 1
+            for i in range(self.horizon):
+                self.agent.evaluate_PE()
+                self.agent.evaluate_r_o()
+                self.agent.normalize_r_o()
+                action = self.agent.generate_action(current_state)
+            # We end DM cycle if horizon time is reached or if we stopped DM before
+            self.history[0] = action
             self.agent.history = self.history
-            if self.agent.continues == 1:
-                self.agent.estimate_model()
-                if (step % self.num_steps == (self.num_steps - 1)) and self.agent.continues == 1:
-                    #self.agent.estimate_model()
-                    self.agent.evaluate_FPD()
-                self.agent.t = self.horizon - 1
-            #if self.agent.continues == 0:
-                #self.fill_rest()
 
             # We make prediction before observing new state
             # predicted_state = self.agent.make_prediction()
@@ -176,11 +169,11 @@ class MonteCarloSimulation:
         #print(self.predicted_states)
         #print("Observed states: ")
         #print(self.states)
-        #bin_edges = np.arange(-0.5, 10.5, 1)
-        #plt.hist(self.states, bins=bin_edges)
-        #plt.xticks(np.arange(0, 11, 1))
-        #plt.title("Controlled run")
-        #plt.show()
+        bin_edges = np.arange(-0.5, 10.5, 1)
+        plt.hist(self.states, bins=bin_edges)
+        plt.xticks(np.arange(0, 11, 1))
+        plt.title("Controlled run")
+        plt.show()
 
     def perform_single_dynamic_run(self):
         """

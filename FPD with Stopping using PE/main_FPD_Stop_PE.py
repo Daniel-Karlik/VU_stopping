@@ -12,7 +12,7 @@ from Learning_FPD_Stop_PE import Experiment
 num_states = 5
 num_actions = 7
 num_steps = 10
-num_mc_runs = 20
+num_mc_runs = 5
 seed = 10
 
 # function experiment
@@ -66,7 +66,7 @@ def generate_data(num_data, ss, aa):
 num_states = 11
 num_actions = 5
 num_steps = 1
-horizon = 100
+horizon = 30
 #ideal_s = np.array([[5, 0], [6, 0], [7, 0], [1, 1], [2, 1], [3, 1]])
 #ideal_a = np.array([3, 0])
 ideal_s = np.array([5, 6, 7])

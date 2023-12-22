@@ -82,28 +82,16 @@ class Agent:
         # state = prob_cont.argmax(axis=0)
         return state
 
-    def generate_action(self, observed_state, time) -> int:
+    def generate_action(self, observed_state) -> int:
         """
         Generates new action and remember it
         :return: return new action
         """
         # TODO q prob of continuing estimation
-        q = 1 - 1 / ((self.num_states ** 2) * self.num_actions)
-        if self.continues == 1:
-            action = np.random.choice(np.arange(self.num_actions), 1, p=self.r_o[:, observed_state, self.t])[0]
+        action = np.random.choice(np.arange(self.num_actions), 1, p=self.r_o[:, observed_state, self.t])[0]
             # we have flattened 2D probability and we need to predict state and stop_state
-            stop_action = np.random.choice([0, 1], 1, p=[1 - q, q])[0]
-            new_action = np.array([action, stop_action])
-        else:
-            # action = np.random.choice([a for a in range(self.num_actions)], 1)[0]
-            action = np.random.choice(np.arange(self.num_actions), 1, p=self.r_o[:, observed_state, self.t])[0]
-            new_action = np.array([action, 0])
         # self.history[0, :] = new_action
         # We dont stop too early
-        if time < 30:
-            new_action[1] = 1
-        if self.continues == 1 and new_action[1] == 0:
-            self.stop()
         return action
 
     def evaluate_FPD(self) -> None:
