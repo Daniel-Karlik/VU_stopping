@@ -1,5 +1,7 @@
 import numpy as np
 from matplotlib import pyplot as plt
+import time
+from prettytable import PrettyTable
 
 # from FPD_Stop_PE import FPD_Stop_PE
 from Entities import Agent, Environment
@@ -9,7 +11,8 @@ class Experiment:
 
     def __init__(self, num_states: int, num_actions: int,
                  num_steps: int, num_mc_runs: int,
-                 horizon: np.int, ideal_s: np.ndarray, ideal_a: np.ndarray, w: np.float, mu: np.float) -> None:
+                 horizon: np.int, ideal_s: np.ndarray, ideal_a: np.ndarray, w: np.float, mu: np.float,
+                 len_sim: np.int, q: np.float) -> None:
         """
         Initialize experiment.
         """
@@ -22,17 +25,18 @@ class Experiment:
         self.ideal_a = ideal_a
         self.w = w
         self.mu = mu
+        self.len_sim = len_sim
         # If we know the model of the Environment in advance e.g. we did population research
         self.known_model = 1
         self.d_storage = np.zeros((self.horizon, self.num_actions, self.num_states, num_mc_runs))
         self.h_storage = np.zeros((self.horizon, self.num_states, num_mc_runs))
         h_init = 1
         self.h_storage[-1] = h_init
-        self.state_sequence = np.zeros((num_mc_runs, horizon))
-        self.selected_state_sequence = np.zeros((num_mc_runs, horizon))
-        self.stop_action_sequence = np.ones((num_mc_runs, horizon))
-        # self.experiment = FPD_Stop_PE(self.num_states, self.num_actions, self.horizon, self.ideal_s, self.ideal_a,
-        #                              self.w, self.mu)
+        self.state_sequence = np.zeros((num_mc_runs, 2, len_sim))
+        self.action_sequence = np.ones((num_mc_runs, 2, len_sim))
+        self.stop_time_sequence = np.ones((num_mc_runs, 2, len_sim))
+        self.time_cost = np.zeros((num_mc_runs, 2))
+        self.q = q
 
     def run(self) -> None:
         """
@@ -42,20 +46,175 @@ class Experiment:
         # Calculating and saving optimal_policy
         # self.plot_opt_policy(self.num_steps - 10, self.num_steps, opt_policy)
         for i in range(self.num_mc_runs):
+            t0 = time.time()
             mcs = MonteCarloSimulation(self.num_states, self.num_actions, self.num_steps, self.ideal_s, self.ideal_a,
-                                       self.w, self.mu, self.known_model, self.horizon)
+                                       self.w, self.mu, self.known_model, self.horizon, self.q, self.len_sim)
             mcs.perform_single_run()
-            #mcs.print_errors()
+            t1 = time.time()
+            # print("time single run:", t1-t0)
+            self.load_results(mcs, i, 0, t1 - t0)
+            # mcs.print_errors()
 
-            #mcs2 = MonteCarloSimulation(self.num_states, self.num_actions, self.num_steps, self.ideal_s, self.ideal_a,
+            # mcs2 = MonteCarloSimulation(self.num_states, self.num_actions, self.num_steps, self.ideal_s, self.ideal_a,
             #                           self.w, self.mu, self.known_model, self.horizon)
-            #mcs2.perform_free_run()
-
+            # mcs2.perform_free_run()
+            t2 = time.time()
             mcs3 = MonteCarloSimulation(self.num_states, self.num_actions, self.num_steps, self.ideal_s, self.ideal_a,
-                                        self.w, self.mu, self.known_model, self.horizon)
+                                        self.w, self.mu, self.known_model, self.horizon, self.q, self.len_sim)
             mcs3.perform_single_dynamic_run()
+            t3 = time.time()
+            # print("time dynamic run:", t3-t2)
+            self.load_results(mcs3, i, 1, t3 - t2)
             # errors = mcs.error_compute()
             # print(errors)
+        # print("Median value of state in classic model was: ")
+        # print(np.median(np.median(self.state_sequence[:, 0, :], axis=0), axis=0))
+        # print("Median value of action in classic model was: ")
+        # print(np.median(np.median(self.action_sequence[:, 0, :], axis=0), axis=0))
+        # print("Median value of state in dynamic model was: ")
+        # print(np.median(np.median(self.state_sequence[:, 1, :], axis=0), axis=0))
+        # print("Median value of action in dynamic model was: ")
+        # print(np.median(np.median(self.action_sequence[:, 1, :], axis=0), axis=0))
+        # print("Median value of stop_time was: ")
+        # print(np.median(self.stop_time_sequence[:, 1, :], axis=1))
+        # print("Observed states: ")
+        # print(self.states)
+        # bin_edges = np.arange(-0.5, self.horizon + 0.5, 1)
+        # plt.hist(np.median(self.stop_time_sequence[:, 1, :], axis=0), bins=bin_edges)
+        # plt.xticks(np.arange(0, self.horizon + 1, 1))
+        # plt.title("Controlled dynamic run")
+        # plt.xlabel("time")
+        # plt.show()
+        #
+        # bin_edges = np.arange(-0.5, self.num_states + 0.5, 1)
+        # plt.hist(np.median(self.state_sequence[:, 1, :], axis=0), bins=bin_edges)
+        # plt.xticks(np.arange(0, self.num_states + 1, 1))
+        # plt.title("Controlled dynamic run")
+        # plt.xlabel("States")
+        # plt.show()
+        #
+        # bin_edges = np.arange(-0.5, self.num_states + 0.5, 1)
+        # plt.hist(np.median(self.state_sequence[:, 0, :], axis=0), bins=bin_edges)
+        # plt.xticks(np.arange(0, self.num_states + 1, 1))
+        # plt.title("Controlled fixed horizon run")
+        # plt.xlabel("States")
+        # plt.show()
+        #
+        # bin_edges = np.arange(-0.5, self.num_actions + 0.5, 1)
+        # plt.hist(np.median(self.action_sequence[:, 1, :], axis=0), bins=bin_edges)
+        # plt.xticks(np.arange(0, self.num_actions + 1, 1))
+        # plt.title("Controlled dynamic run")
+        # plt.xlabel("Actions")
+        # plt.show()
+        #
+        # bin_edges = np.arange(-0.5, self.num_actions + 0.5, 1)
+        # plt.hist(np.median(self.action_sequence[:, 0, :], axis=0), bins=bin_edges)
+        # plt.xticks(np.arange(0, self.num_actions + 1, 1))
+        # plt.title("Controlled fixed horizon run")
+        # plt.xlabel("Actions")
+        # plt.show()
+
+        self.save_results(mcs3)
+        self.save_images(mcs3)
+
+    def save_results(self, mcs):
+
+        # Specify the Column Names while initializing the Table
+        myTable = PrettyTable(["RUNS", "Median", "Mean", "STD DER", "MAX", "MIN"])
+        # Add rows
+        myTable.add_row(["Regular ", np.median(self.time_cost[:, 0], axis=0),
+                         np.mean(self.time_cost[:, 0], axis=0),
+                         np.std(self.time_cost[:, 0], axis=0),
+                         np.max(self.time_cost[:, 0], axis=0),
+                         np.min(self.time_cost[:, 0], axis=0)])
+        myTable.add_row(["Dynamic", np.median(self.time_cost[:, 1], axis=0),
+                         np.mean(self.time_cost[:, 1], axis=0),
+                         np.std(self.time_cost[:, 1], axis=0),
+                         np.max(self.time_cost[:, 1], axis=0),
+                         np.min(self.time_cost[:, 1], axis=0)])
+        filename = "Inputs_" + str(self.len_sim) + "_" + str(self.horizon) + "_q_" + str(self.q) + "_mu_" + str(
+            self.mu) + "_w_" + str(self.w) + "_s_" + str(self.ideal_s) + "_a_" + str(self.ideal_a) + ".txt"
+        with open(filename, 'w') as w:
+            w.write(myTable.get_string())
+        print(myTable)
+
+    def save_images(self, mcs):
+        bin_edges = np.arange(-0.5, self.horizon + 0.5, 1)
+        plt.hist(np.median(self.stop_time_sequence[:, 1, :], axis=0), bins=bin_edges)
+        plt.xticks(np.arange(0, self.horizon + 1, 1))
+        plt.title("Controlled dynamic run")
+        plt.xlabel("time")
+        plt.grid()
+        # plt.show()
+        filename = "plot_stop_time_" + str(self.len_sim) + "_" + str(self.horizon) + "_q_" + str(self.q) + "_mu_" + str(
+            self.mu) + "_w_" + str(self.w) + ".png"
+        plt.savefig(filename)
+        plt.close()
+
+        bin_edges = np.arange(-0.5, self.num_states + 0.5, 1)
+        plt.hist(np.median(self.state_sequence[:, 1, :], axis=0), bins=bin_edges)
+        plt.xticks(np.arange(0, self.num_states + 1, 1))
+        plt.title("Controlled dynamic run")
+        plt.xlabel("States")
+        plt.grid()
+        # plt.show()
+        filename = "plot_states_dynamic_" + str(self.len_sim) + "_" + str(self.horizon) + "_q_" + str(
+            self.q) + "_mu_" + str(
+            self.mu) + "_w_" + str(self.w) + ".png"
+        plt.savefig(filename)
+        plt.close()
+
+        bin_edges = np.arange(-0.5, self.num_states + 0.5, 1)
+        plt.hist(np.median(self.state_sequence[:, 0, :], axis=0), bins=bin_edges)
+        plt.xticks(np.arange(0, self.num_states + 1, 1))
+        plt.title("Controlled fixed horizon run")
+        plt.xlabel("States")
+        plt.grid()
+        # plt.show()
+        filename = "plot_states_regular_" + str(self.len_sim) + "_" + str(self.horizon) + "_q_" + str(
+            self.q) + "_mu_" + str(
+            self.mu) + "_w_" + str(self.w) + ".png"
+        plt.savefig(filename)
+        plt.close()
+
+        bin_edges = np.arange(-0.5, self.num_actions + 0.5, 1)
+        plt.hist(np.median(self.action_sequence[:, 1, :], axis=0), bins=bin_edges)
+        plt.xticks(np.arange(0, self.num_actions + 1, 1))
+        plt.title("Controlled dynamic run")
+        plt.xlabel("Actions")
+        plt.grid()
+        # plt.show()
+        filename = "plot_actions_dynamic_" + str(self.len_sim) + "_" + str(self.horizon) + "_q_" + str(
+            self.q) + "_mu_" + str(
+            self.mu) + "_w_" + str(self.w) + ".png"
+        plt.savefig(filename)
+        plt.close()
+
+        bin_edges = np.arange(-0.5, self.num_actions + 0.5, 1)
+        plt.hist(np.median(self.action_sequence[:, 0, :], axis=0), bins=bin_edges)
+        plt.xticks(np.arange(0, self.num_actions + 1, 1))
+        plt.title("Controlled fixed horizon run")
+        plt.xlabel("Actions")
+        plt.grid()
+        # plt.show()
+        filename = "plot_actions_regular_" + str(self.len_sim) + "_" + str(self.horizon) + "_q_" + str(
+            self.q) + "_mu_" + str(
+            self.mu) + "_w_" + str(self.w) + ".png"
+        plt.savefig(filename)
+        plt.close()
+
+    def load_results(self, mcs, index, order, time_cost):
+        """
+
+        :param mcs:
+        :param index: number of run from which the results are loaded
+        :param order: 0 for normal run, 1 for dynamic
+        :return:
+        """
+        self.state_sequence[index, order, :] = mcs.states
+        self.action_sequence[index, order, :] = mcs.actions
+        self.stop_time_sequence[index, order, :] = mcs.stopping_time
+        self.time_cost[index, order] = time_cost
 
     def plot_results(self, results) -> None:
         """
@@ -79,7 +238,8 @@ class Experiment:
 
 class MonteCarloSimulation:
 
-    def __init__(self, num_states, num_actions, num_steps, ideal_s, ideal_a, w, mu, known_model, horizon, len_sim=500) -> None:
+    def __init__(self, num_states, num_actions, num_steps, ideal_s, ideal_a, w, mu, known_model, horizon, q,
+                 len_sim=500) -> None:
         """
         Initialize a single Monte Carlo simulation.
         """
@@ -92,13 +252,15 @@ class MonteCarloSimulation:
         self.w, self.mu = w, mu
         self.horizon = horizon
         self.len_sim = len_sim
-        self.agent = Agent(self.num_states, self.num_actions, self.horizon, self.ideal_s, self.ideal_a, self.w, self.mu)
+        self.agent = Agent(self.num_states, self.num_actions, self.horizon, self.ideal_s, self.ideal_a, self.w, self.mu,
+                           q)
         self.system = Environment(self.num_states, self.num_actions)
         self.errors = np.zeros((len_sim, 1))
-        self.predicted_states = np.zeros((len_sim + 1), dtype=int)
-        self.states = np.zeros((len_sim + 1), dtype=int)
+        self.predicted_states = np.zeros(len_sim, dtype=int)
+        self.states = np.zeros(len_sim, dtype=int)
+        self.actions = np.zeros(len_sim, dtype=int)
+        self.stopping_time = np.zeros(len_sim, dtype=int)
         self.init_history()
-
 
     def init_history(self):
         """
@@ -109,7 +271,7 @@ class MonteCarloSimulation:
         # history[1,:] = [state, stop_state]
         history = np.zeros(2, dtype=int)
         self.history = self.agent.history
-        #return history
+        # return history
 
     def perform_free_run(self):
         """
@@ -124,11 +286,12 @@ class MonteCarloSimulation:
             # store errors
             self.history[0] = np.random.choice([a for a in range(self.num_actions)], 1)[0]
 
-        #bin_edges = np.arange(-0.5, 10.5, 1)
-        #plt.hist(self.states, bins=bin_edges)
-        #plt.xticks(np.arange(0, 11, 1))
-        #plt.title("Free_run")
-        #plt.show()
+        # bin_edges = np.arange(-0.5, 10.5, 1)
+        # plt.hist(self.states, bins=bin_edges)
+        # plt.xticks(np.arange(0, 11, 1))
+        # plt.title("Free_run")
+        # plt.show()
+
     def perform_single_run(self):
         """
         Perform a single run for the given number of decision steps and return some error plots.
@@ -144,12 +307,13 @@ class MonteCarloSimulation:
             self.agent.t = self.horizon - 1
             self.agent.h[:, :] = 1
             for i in range(self.horizon):
-                self.agent.evaluate_PE()
+                self.agent.evaluate_PE_short()
                 self.agent.evaluate_r_o()
                 self.agent.normalize_r_o()
                 action = self.agent.generate_action(current_state)
             # We end DM cycle if horizon time is reached or if we stopped DM before
             self.history[0] = action
+            self.actions[step] = action
             self.agent.history = self.history
 
             # We make prediction before observing new state
@@ -164,16 +328,16 @@ class MonteCarloSimulation:
             # self.agent.update_history(action, observable_state)
             # self.environment.update_history(action, observable_state)
             # self.store_pred(observable_state, predicted_state)
-        #print(self.agent.stop_time)
-        #print("Predicted states: ")
-        #print(self.predicted_states)
-        #print("Observed states: ")
-        #print(self.states)
-        bin_edges = np.arange(-0.5, 10.5, 1)
-        plt.hist(self.states, bins=bin_edges)
-        plt.xticks(np.arange(0, 11, 1))
-        plt.title("Controlled run")
-        plt.show()
+        # print(self.agent.stop_time)
+        # print("Predicted states: ")
+        # print(self.predicted_states)
+        # print("Observed states: ")
+        # print(self.states)
+        # bin_edges = np.arange(-0.5, 10.5, 1)
+        # plt.hist(self.states, bins=bin_edges)
+        # plt.xticks(np.arange(0, 11, 1))
+        # plt.title("Controlled run")
+        # plt.show()
 
     def perform_single_dynamic_run(self):
         """
@@ -201,15 +365,18 @@ class MonteCarloSimulation:
             self.agent.continues = 1
             # We end DM cycle if horizon time is reached or if we stopped DM before
             self.history[0] = action
+            self.agent.d_io_long.fill(0)
+            self.actions[step] = action
+            self.stopping_time[step] = self.agent.stop_time
             self.agent.history = self.history
 
-        print("Observed states: ")
-        print(self.states)
-        bin_edges = np.arange(-0.5, 10.5, 1)
-        plt.hist(self.states, bins=bin_edges)
-        plt.xticks(np.arange(0, 11, 1))
-        plt.title("Controlled dynamic run")
-        plt.show()
+        # print("Observed states: ")
+        # print(self.states)
+        # bin_edges = np.arange(-0.5, 10.5, 1)
+        # plt.hist(self.states, bins=bin_edges)
+        # plt.xticks(np.arange(0, 11, 1))
+        # plt.title("Controlled dynamic run")
+        # plt.show()
 
     def perform_single_run_floating_horizon(self, floating_horizon: np.int, init: bool = False):
         stop_action = 1
@@ -232,7 +399,7 @@ class MonteCarloSimulation:
             if self.agent.continues == 1:
                 self.agent.estimate_model()
                 self.agent.evaluate_FPD_floating_horizon(floating_horizon, init)
-        #self.agent.t = self.horizon - 1
+        # self.agent.t = self.horizon - 1
 
     def print_errors(self):
         print(np.sum(self.errors))

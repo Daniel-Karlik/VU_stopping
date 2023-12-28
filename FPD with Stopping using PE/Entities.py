@@ -1,11 +1,12 @@
 import numpy as np
 from scipy.optimize import fsolve
+import random
 
 
 class Agent:
 
     def __init__(self, num_states: int, num_actions: int, horizon: int, ideal_s: np.ndarray, ideal_a: np.ndarray,
-                 w: np.float, mu: np.float) -> None:
+                 w: np.float, mu: np.float, q: np.float) -> None:
         self.num_states, self.num_actions = num_states, num_actions
         self.horizon = horizon
         self.ideal_s, self.ideal_a = ideal_s, ideal_a
@@ -27,10 +28,10 @@ class Agent:
         self.m_io = np.ones((num_states, num_actions, num_states)) / num_states
         self.m_io_long = np.ones((num_states, 2, num_actions, 2, num_states, 2)) / (num_states * 2)
         self.model_long = np.ones((num_states, 2, num_actions, 2, num_states, 2)) / (num_states * 2)
-        self.dec_rule = np.ones((num_actions, 2, num_states, 2)) / (num_actions * 2)
+        self.dec_rule = np.ones((num_actions, 2, num_states, 2, horizon)) / (num_actions * 2)
         self.stop_rule = np.ones((2, num_states, 2)) / 2
         self.ideal_stop_rule = np.ones((2, num_states, 2)) / 2
-        self.init_ideal_stop_rule()
+        self.init_ideal_stop_rule(q)
         self.h_long = np.ones((num_states, 2, horizon))
         self.d_io_long = np.zeros((num_actions, 2, num_states, 2, horizon))
 
@@ -44,8 +45,9 @@ class Agent:
                 for ss in range(self.num_states):
                     self.model[s, a, ss] = 1
 
-    def init_ideal_stop_rule(self):
-        q = 0.8
+    def init_ideal_stop_rule(self, q):
+        # q = 0.5
+        # q = 0.9
         for s_s in range(2):
             for s in range(self.num_states):
                 for a_s in range(2):
@@ -89,7 +91,7 @@ class Agent:
         """
         # TODO q prob of continuing estimation
         action = np.random.choice(np.arange(self.num_actions), 1, p=self.r_o[:, observed_state, self.t])[0]
-            # we have flattened 2D probability and we need to predict state and stop_state
+        # we have flattened 2D probability and we need to predict state and stop_state
         # self.history[0, :] = new_action
         # We dont stop too early
         return action
@@ -119,11 +121,29 @@ class Agent:
 
         :return:
         """
+        rho_max = np.zeros((self.num_states))
         rho, lam = self.evaluate_rho()
         for s in range(self.num_states):
-            rho_max = np.max(rho[:, s])
+            rho_max[s] = np.max(rho[:, s])
         self.evaluate_d(rho, rho_max)
         self.evaluate_m_io(lam)
+        self.evaluate_r_io()
+        self.normalize_r_io()
+        self.evaluate_h()
+        # self.evaluate_r_o()
+        # self.normalize_r_o()
+        # self.t = self.t - 1
+
+    def evaluate_PE_short(self) -> None:
+        """
+
+        :return:
+        """
+        rho_max = np.zeros((self.num_states))
+        rho, lam = self.evaluate_rho()
+        for s in range(self.num_states):
+            rho_max[s] = np.max(rho[:, s])
+        self.evaluate_d(rho, rho_max)
         self.evaluate_r_io()
         self.normalize_r_io()
         self.evaluate_h()
@@ -154,9 +174,9 @@ class Agent:
                             for ss in range(self.num_states):
                                 self.d_io_long[a, a_s, s, s_s, self.t] += self.model[ss, a, s] * np.log(
                                     self.model[ss, a, s] / (self.m_io[ss, a, s] * self.h_long[ss, 1, self.t]))
-        #if np.max(self.d_io_long[:, :, :, :, self.t]) > 0:
+        # if np.max(self.d_io_long[:, :, :, :, self.t]) > 0:
         #    self.d_io_long[:, :, :, :, self.t] = self.d_io_long[:, :, :, :, self.t] - np.max(self.d_io_long[:, :, :, :, self.t])
-        #else:
+        # else:
         #    self.d_io_long[:, :, :, :, self.t] = self.d_io_long[:, :, :, :, self.t] + np.max(np.abs(self.d_io_long[:, :, :, :, self.t]))
 
     def evaluate_long_h(self):
@@ -177,14 +197,16 @@ class Agent:
             for a_s in range(2):
                 for s in range(self.num_states):
                     for s_s in range(2):
-                        self.dec_rule[a, a_s, s, s_s] = self.r_io[a, s, self.t] * self.ideal_stop_rule[a_s, s, s_s] * np.exp(
-                            -self.d_io_long[a, a_s, s, s_s, self.t]) / self.h_long[s, s_s, self.t - 1]
+                        self.dec_rule[a, a_s, s, s_s, self.t] = self.r_io[a, s, self.t] * self.ideal_stop_rule[
+                            a_s, s, s_s] * np.exp(-self.d_io_long[a, a_s, s, s_s, self.t]) / self.h_long[
+                                                                    s, s_s, self.t - 1]
 
     def stop_decision(self) -> np.int:
 
         # marginalizace pravdepodobnosti
-        p_action = np.sum(self.dec_rule[:, :, self.history[1], self.continues], axis=1)
-        p_stop = np.sum(self.dec_rule[:, :, self.history[1], self.continues], axis=0)
+        np.random.seed()
+        p_action = np.sum(self.dec_rule[:, :, self.history[1], self.continues, self.t], axis=1)
+        p_stop = np.sum(self.dec_rule[:, :, self.history[1], self.continues, self.t], axis=0)
         has_nan1 = np.isnan(p_action)
         has_nan2 = np.isnan(p_stop)
         if np.any(has_nan1) or np.any(has_nan2):
@@ -192,10 +214,15 @@ class Agent:
         action = np.random.choice(np.arange(self.num_actions), 1, p=p_action)[0]
         stop_action = np.random.choice(np.arange(2), 1, p=p_stop)[0]
         # Pokud nezastavime drive zastavime pri dosahnuti horizontu
-        if self.t == 1:
+        if self.t == 0:
             action = np.random.choice(np.arange(self.num_actions), 1, p=p_action)[0]
             stop_action = 0
+            self.stop_time = self.horizon - self.t
+            self.stop()
         if stop_action == 0:
+            self.stop_time = self.horizon - self.t
+            s = self.stop_time
+            a = 0
             self.stop()
         self.t = self.t - 1
         return action
@@ -262,7 +289,6 @@ class Agent:
             for s in range(self.num_states):
                 self.m_io[:, a, s] = self.m_io[:, a, s] / np.sum(self.m_io[:, a, s])
 
-
     def evaluate_rho(self) -> (np.ndarray, np.ndarray):
         """
         Evaluate rho
@@ -275,7 +301,8 @@ class Agent:
                 ideal_s_model = self.indicator_function(self.ideal_s, self.model[:, a, s])
                 aux_a = np.zeros((self.num_actions))
                 for vec in self.ideal_a:
-                    if vec == a: aux_a[a] = 1
+                    if vec == a:
+                        aux_a[a] = 1
                 rho[a, s] = np.sum(ideal_s_model) + aux_a[a] * self.w
                 lam[a, s] = np.sum(self.model[:, a, s] ** 2)
                 # print(a, a_s, s, s_s)
@@ -298,14 +325,17 @@ class Agent:
         """
         d_max = np.ones((np.shape(self.d)[0], np.shape(self.d)[1]))
         d_max = self.aux_d(rho, rho_max)
-        self.d[:, :, self.t] = d_max + np.log(rho_max / rho)
+        for a in range(self.num_actions):
+            for ss in range(self.num_states):
+                self.d[a, ss, self.t] = d_max[a, ss] + np.log(rho_max[ss] / rho[a, ss])
         # alla normalizace aby to nedavalo prilis male r_io a r_o, reseni numerickych omezeni
         # self.d[:, :, self.t] = self.d[:, :, self.t] - np.max(self.d[:, :, self.t])
-        if np.max(self.d[:, :, self.t]) > 0:
-            self.d[:, :, self.t] = self.d[:, :, self.t] - np.max(self.d[:, :, self.t])
-        else:
-            self.d[:, :, self.t] = self.d[:, :, self.t] + np.max(np.abs(self.d[:, :, self.t]))
 
+        # Je toto treba?
+        # if np.max(self.d[:, :, self.t]) > 0:
+        #     self.d[:, :, self.t] = self.d[:, :, self.t] - np.max(self.d[:, :, self.t])
+        # else:
+        #     self.d[:, :, self.t] = self.d[:, :, self.t] + np.max(np.abs(self.d[:, :, self.t]))
 
     def opt_function(self, alpha: np.array, lam: np.array, a: int, s: int,
                      r_side: np.array) -> np.array:
@@ -327,7 +357,7 @@ class Agent:
             for a in range(self.num_actions):
                 for ss in range(self.num_states):
                     aux_d[a, ss] += np.sum(self.model[s, a, ss] * np.log(
-                        rho[a, ss] / (self.h[s, self.t] * rho_max)))
+                        rho[a, ss] / (self.h[s, self.t] * rho_max[ss])))
         for a in range(self.num_actions):
             for ss in range(self.num_states):
                 aux_d[a, ss] = max(0, np.max(aux_d[:, ss]))
@@ -343,6 +373,7 @@ class Environment:
         # self.model
 
     def init_model(self, num_data, ss, aa) -> np.ndarray:
+        random.seed(5)
         A = 0.99
         B = 0.05
         C = 0.125
@@ -352,7 +383,7 @@ class Environment:
         y = np.ones(num_data)
         a = np.ones(num_data + 1)
         y[0] = 5.5
-        for t in range(2, num_data - 1):
+        for t in range(1, num_data - 1):
             a[t] = np.random.choice([a for a in range(aa)], 1)[0] + 1
             y[t] = A * y[t - 1] + B * a[t] - C + B * np.random.normal(0, 1, 1)
 
@@ -363,7 +394,7 @@ class Environment:
         for t in range(1, num_data - 1):
             V[yy[t].astype(np.int64) - 1, a[t].astype(np.int64) - 1, yy[t - 1].astype(np.int64) - 1] = V[yy[t].astype(
                 np.int64) - 1, a[t].astype(np.int64) - 1, yy[t - 1].astype(np.int64) - 1] + 1
-
+        random.seed()
         for at in range(aa):
             for s1 in range(ss):
                 V[:, at, s1] = V[:, at, s1] / np.sum(V[:, at, s1])
