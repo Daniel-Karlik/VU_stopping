@@ -64,8 +64,7 @@ class Agent:
         :param prev_state:
         :return:
         """
-        if self.continues == 1:
-            self.V[observed_state, observed_action, prev_state] += 1
+        self.V[observed_state, observed_action, prev_state] += 1
         # self.history[0, 0] = observed_action
 
     def estimate_model(self) -> None:
@@ -91,9 +90,6 @@ class Agent:
         """
         # TODO q prob of continuing estimation
         action = np.random.choice(np.arange(self.num_actions), 1, p=self.r_o[:, observed_state, self.t])[0]
-        # we have flattened 2D probability and we need to predict state and stop_state
-        # self.history[0, :] = new_action
-        # We dont stop too early
         return action
 
     def evaluate_FPD(self) -> None:
@@ -230,8 +226,7 @@ class Agent:
     def evaluate_r_o(self) -> None:
         for a in range(self.num_actions):
             for s in range(self.num_states):
-                self.r_o[a, s, self.t] = np.exp(-(self.mu + 1) * self.d[a, s, self.t]) / \
-                                         self.h[s, self.t - 1]
+                self.r_o[a, s, self.t] = np.exp(-(self.mu + 1) * self.d[a, s, self.t]) / self.h[s, self.t - 1]
 
     def evaluate_h(self) -> None:
         """
@@ -246,11 +241,10 @@ class Agent:
         for a in range(self.num_actions):
             for s in range(self.num_states):
                 self.r_io[a, s, self.t] = np.exp(-self.mu * self.d[a, s, self.t])
-                # / np.max(np.exp(-self.mu * self.d[a, s, self.t]))
 
-        for a in range(self.num_actions):
-            for s in range(self.num_states):
-                self.r_io[a, s, self.t] = self.r_io[a, s, self.t] / np.sum(self.r_io[:, s, self.t])
+        # for a in range(self.num_actions):
+        #     for s in range(self.num_states):
+        #         self.r_io[a, s, self.t] = self.r_io[a, s, self.t] / np.sum(self.r_io[:, s, self.t])
 
     def normalize_r_io(self):
         """
@@ -275,9 +269,7 @@ class Agent:
         """
         for a in range(self.num_actions):
             for s in range(self.num_states):
-                # TODO: solve if I need long d or short d HERE
-                r_side = self.d[a, s, self.t] + np.sum(
-                    self.model[:, a, s] * np.log(self.h[:, self.t]))
+                r_side = self.d[a, s, self.t] + np.sum(self.model[:, a, s] * np.log(self.h[:, self.t]))
                 alpha = self.alpha[a, s]
                 # l_side = alpha * lam[a, ss] + np.log(np.sum(self.model[:, a, ss] * np.exp(-alpha * self.model[:, a, ss])))
                 alpha = fsolve(self.opt_function, alpha, args=(lam, a, s, r_side))
@@ -296,13 +288,14 @@ class Agent:
         """
         rho = np.ones((self.num_actions, self.num_states))
         lam = np.ones((self.num_actions, self.num_states))
+        aux_a = np.zeros((self.num_actions))
+        for a in range(self.num_actions):
+            for vec in self.ideal_a:
+                if vec == a:
+                    aux_a[a] = 1
         for a in range(self.num_actions):
             for s in range(self.num_states):
                 ideal_s_model = self.indicator_function(self.ideal_s, self.model[:, a, s])
-                aux_a = np.zeros((self.num_actions))
-                for vec in self.ideal_a:
-                    if vec == a:
-                        aux_a[a] = 1
                 rho[a, s] = np.sum(ideal_s_model) + aux_a[a] * self.w
                 lam[a, s] = np.sum(self.model[:, a, s] ** 2)
                 # print(a, a_s, s, s_s)
@@ -323,7 +316,6 @@ class Agent:
         :param rho_max:
         :return:
         """
-        d_max = np.ones((np.shape(self.d)[0], np.shape(self.d)[1]))
         d_max = self.aux_d(rho, rho_max)
         for a in range(self.num_actions):
             for ss in range(self.num_states):
@@ -339,8 +331,7 @@ class Agent:
 
     def opt_function(self, alpha: np.array, lam: np.array, a: int, s: int,
                      r_side: np.array) -> np.array:
-        l_side = alpha * lam[a, s] + np.log(
-            np.sum(self.model[:, a, s] * np.exp(-alpha * self.model[:, a, s])))
+        l_side = alpha * lam[a, s] + np.log(np.sum(self.model[:, a, s] * np.exp(-alpha * self.model[:, a, s])))
         f = l_side - r_side
         return f
 
@@ -356,8 +347,8 @@ class Agent:
         for s in range(self.num_states):
             for a in range(self.num_actions):
                 for ss in range(self.num_states):
-                    aux_d[a, ss] += np.sum(self.model[s, a, ss] * np.log(
-                        rho[a, ss] / (self.h[s, self.t] * rho_max[ss])))
+                    aux_d[a, ss] += self.model[s, a, ss] * np.log(
+                        rho[a, ss] / (self.h[s, self.t] * rho_max[ss]))
         for a in range(self.num_actions):
             for ss in range(self.num_states):
                 aux_d[a, ss] = max(0, np.max(aux_d[:, ss]))

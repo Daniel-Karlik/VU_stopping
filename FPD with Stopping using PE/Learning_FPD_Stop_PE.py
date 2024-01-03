@@ -2,6 +2,7 @@ import numpy as np
 from matplotlib import pyplot as plt
 import time
 from prettytable import PrettyTable
+import pandas as pd
 
 # from FPD_Stop_PE import FPD_Stop_PE
 from Entities import Agent, Environment
@@ -65,6 +66,7 @@ class Experiment:
             t3 = time.time()
             # print("time dynamic run:", t3-t2)
             self.load_results(mcs3, i, 1, t3 - t2)
+            print(f"Iteration number: {i}")
             # errors = mcs.error_compute()
             # print(errors)
         # print("Median value of state in classic model was: ")
@@ -114,10 +116,33 @@ class Experiment:
         # plt.xlabel("Actions")
         # plt.show()
 
-        self.save_results(mcs3)
-        self.save_images(mcs3)
+        self.save_results()
+        self.save_images()
 
-    def save_results(self, mcs):
+    def store_results(self):
+        df_results = pd.DataFrame(self.state_sequence[0, 0, :], index=None)
+        df_results = df_results.set_axis(['states_fixed'], axis=1)
+        df_results['states_dynamic'] = self.state_sequence[0, 1, :]
+        df_results['actions_fixed'] = self.action_sequence[0, 0, :]
+        df_results['actions_dynamic'] = self.action_sequence[0, 1, :]
+        df_results['stop_time'] = self.stop_time_sequence[0, 1, :]
+        df_results['time_cost'] = self.time_cost[0, 0]
+
+        for i in np.arange(1, self.num_mc_runs, 1):
+            df_help = pd.DataFrame(self.state_sequence[i, 0, :], index=None)
+            df_help = df_help.set_axis(['states_fixed'], axis=1)
+            df_help['states_dynamic'] = self.state_sequence[i, 1, :]
+            df_help['actions_fixed'] = self.action_sequence[i, 0, :]
+            df_help['actions_dynamic'] = self.action_sequence[i, 1, :]
+            df_help['stop_time'] = self.stop_time_sequence[i, 1, :]
+            df_help['time_cost'] = self.time_cost[i, 0]
+            df_results = pd.concat([df_results, df_help], ignore_index=True)
+
+        filename = "Results_" + str(self.len_sim) + "_h_" + str(self.horizon) + "_MC_" + str(self.num_mc_runs) + "_q_" + str(self.q) + "_mu_" + str(
+            self.mu) + "_w_" + str(self.w) + "_s_" + str(self.ideal_s) + "_a_" + str(self.ideal_a) + ".csv"
+        df_results.to_csv(filename, sep='\t', encoding='utf-8')
+
+    def save_results(self):
 
         # Specify the Column Names while initializing the Table
         myTable = PrettyTable(["RUNS", "Median", "Mean", "STD DER", "MAX", "MIN"])
@@ -138,69 +163,83 @@ class Experiment:
             w.write(myTable.get_string())
         print(myTable)
 
-    def save_images(self, mcs):
+    def save_images(self):
         bin_edges = np.arange(-0.5, self.horizon + 0.5, 1)
-        plt.hist(np.median(self.stop_time_sequence[:, 1, :], axis=0), bins=bin_edges)
-        plt.xticks(np.arange(0, self.horizon + 1, 1))
-        plt.title("Controlled dynamic run")
-        plt.xlabel("time")
+        plt.hist(np.median(np.sort(self.stop_time_sequence[:, 1, :], axis=1), axis=0), bins=bin_edges)
+        plt.xticks(np.arange(0, self.horizon, 5))
+        plt.title("Histogram of Stopping Time")
+        plt.xlabel("Time")
         plt.grid()
         # plt.show()
         filename = "plot_stop_time_" + str(self.len_sim) + "_" + str(self.horizon) + "_q_" + str(self.q) + "_mu_" + str(
             self.mu) + "_w_" + str(self.w) + ".png"
-        plt.savefig(filename)
+        plt.savefig(filename, dpi=600)
         plt.close()
 
-        bin_edges = np.arange(-0.5, self.num_states + 0.5, 1)
-        plt.hist(np.median(self.state_sequence[:, 1, :], axis=0), bins=bin_edges)
-        plt.xticks(np.arange(0, self.num_states + 1, 1))
-        plt.title("Controlled dynamic run")
+        #bin_edges = np.arange(-0.5, self.num_states + 0.5, 1)
+        barWidth = 0.4
+        hist = np.zeros((self.state_sequence.shape[0], self.num_states))
+        combined_hist = np.zeros((2, self.num_states))
+        for i in range(self.state_sequence.shape[0]):
+            hist[i, :], bins = np.histogram(self.state_sequence[i, 1, :], bins=np.arange(-0.5, self.num_states, 1))
+            hist[i, :] = hist[i, :]/np.sum(hist[i, :])
+        combined_hist[1, :] = np.sum(hist[:, :], axis=0)/self.state_sequence.shape[0]*self.len_sim
+        plt.bar(np.arange(0, self.num_states, 1), combined_hist[1, :], width=barWidth, color='r')
+        plt.xticks(np.arange(0, self.num_states, 1))
+        plt.title("States histogram")
         plt.xlabel("States")
         plt.grid()
-        # plt.show()
-        filename = "plot_states_dynamic_" + str(self.len_sim) + "_" + str(self.horizon) + "_q_" + str(
+
+        hist = np.zeros((self.state_sequence.shape[0], self.num_states))
+        for i in range(self.state_sequence.shape[0]):
+            hist[i, :], bins = np.histogram(self.state_sequence[i, 0, :], bins=np.arange(-0.5, self.num_states, 1))
+            hist[i, :] = hist[i, :]/np.sum(hist[i, :])
+        combined_hist[0, :] = np.sum(hist[:, :], axis=0)/self.state_sequence.shape[0]*self.len_sim
+        plt.bar(np.arange(0, self.num_states, 1) + barWidth, combined_hist[0, :], width=barWidth, color='b')
+        filename = "plot_states_" + str(self.len_sim) + "_" + str(self.horizon) + "_q_" + str(
             self.q) + "_mu_" + str(
             self.mu) + "_w_" + str(self.w) + ".png"
-        plt.savefig(filename)
+        plt.savefig(filename, dpi=600)
         plt.close()
 
-        bin_edges = np.arange(-0.5, self.num_states + 0.5, 1)
-        plt.hist(np.median(self.state_sequence[:, 0, :], axis=0), bins=bin_edges)
-        plt.xticks(np.arange(0, self.num_states + 1, 1))
-        plt.title("Controlled fixed horizon run")
-        plt.xlabel("States")
-        plt.grid()
-        # plt.show()
-        filename = "plot_states_regular_" + str(self.len_sim) + "_" + str(self.horizon) + "_q_" + str(
-            self.q) + "_mu_" + str(
-            self.mu) + "_w_" + str(self.w) + ".png"
-        plt.savefig(filename)
-        plt.close()
-
-        bin_edges = np.arange(-0.5, self.num_actions + 0.5, 1)
-        plt.hist(np.median(self.action_sequence[:, 1, :], axis=0), bins=bin_edges)
-        plt.xticks(np.arange(0, self.num_actions + 1, 1))
-        plt.title("Controlled dynamic run")
+        barWidth = 0.4
+        hist2 = np.zeros((self.action_sequence.shape[0], self.num_actions))
+        combined_hist2 = np.zeros((2, self.num_actions))
+        # bin_edges = np.arange(-0.5, self.num_actions + 0.5, 1)
+        for i in range(self.action_sequence.shape[0]):
+            hist2[i, :], bins = np.histogram(self.action_sequence[i, 1, :], bins=np.arange(-0.5, self.num_actions, 1))
+            hist2[i, :] = hist2[i, :]/np.sum(hist2[i, :])
+        combined_hist2[1, :] = np.sum(hist2[:, :], axis=0)/self.action_sequence.shape[0]*self.len_sim
+        plt.bar(np.arange(0, self.num_actions, 1), combined_hist2[1, :], width=barWidth, color='r')
+        #plt.hist(np.median(np.sort(self.action_sequence[:, 1, :], axis=1), axis=0), bins=bin_edges)
+        plt.xticks(np.arange(0, self.num_actions, 1))
+        #plt.title("Controlled dynamic run")
+        plt.title("Actions histogram")
         plt.xlabel("Actions")
         plt.grid()
-        # plt.show()
-        filename = "plot_actions_dynamic_" + str(self.len_sim) + "_" + str(self.horizon) + "_q_" + str(
-            self.q) + "_mu_" + str(
-            self.mu) + "_w_" + str(self.w) + ".png"
-        plt.savefig(filename)
-        plt.close()
+        # filename = "plot_actions_dynamic_" + str(self.len_sim) + "_" + str(self.horizon) + "_q_" + str(
+        #     self.q) + "_mu_" + str(
+        #     self.mu) + "_w_" + str(self.w) + ".png"
+        # plt.savefig(filename)
+        # plt.close()
 
         bin_edges = np.arange(-0.5, self.num_actions + 0.5, 1)
-        plt.hist(np.median(self.action_sequence[:, 0, :], axis=0), bins=bin_edges)
-        plt.xticks(np.arange(0, self.num_actions + 1, 1))
-        plt.title("Controlled fixed horizon run")
-        plt.xlabel("Actions")
-        plt.grid()
+        hist2 = np.zeros((self.action_sequence.shape[0], self.num_actions))
+        for i in range(self.action_sequence.shape[0]):
+            hist2[i, :], bins = np.histogram(self.action_sequence[i, 0, :], bins=np.arange(-0.5, self.num_actions, 1))
+            hist2[i, :] = hist2[i, :]/np.sum(hist2[i, :])
+        combined_hist2[0, :] = np.sum(hist2[:, :], axis=0)/self.action_sequence.shape[0]*self.len_sim
+        plt.bar(np.arange(0, self.num_actions, 1) + barWidth, combined_hist2[0, :], width=barWidth, color='b')
+        #plt.hist(np.median(np.sort(self.action_sequence[:, 0, :], axis=1), axis=0), bins=bin_edges)
+        #plt.xticks(np.arange(0, self.num_actions + 1, 1))
+        #plt.title("Controlled fixed horizon run")
+        #plt.xlabel("Actions")
+        #plt.grid()
         # plt.show()
-        filename = "plot_actions_regular_" + str(self.len_sim) + "_" + str(self.horizon) + "_q_" + str(
+        filename = "plot_actions_" + str(self.len_sim) + "_" + str(self.horizon) + "_q_" + str(
             self.q) + "_mu_" + str(
             self.mu) + "_w_" + str(self.w) + ".png"
-        plt.savefig(filename)
+        plt.savefig(filename, dpi=600)
         plt.close()
 
     def load_results(self, mcs, index, order, time_cost):
@@ -300,9 +339,9 @@ class MonteCarloSimulation:
             # estimation phase
             current_state = self.system.generate_state(self.history[0], self.history[1], 0, 0)
             self.states[step] = current_state
-            self.history[1] = current_state
             # store errors
             self.agent.update_V(current_state, self.history[0], self.history[1])
+            self.history[1] = current_state
             self.agent.estimate_model()
             self.agent.t = self.horizon - 1
             self.agent.h[:, :] = 1
@@ -311,6 +350,7 @@ class MonteCarloSimulation:
                 self.agent.evaluate_r_o()
                 self.agent.normalize_r_o()
                 action = self.agent.generate_action(current_state)
+                self.agent.t = self.agent.t - 1
             # We end DM cycle if horizon time is reached or if we stopped DM before
             self.history[0] = action
             self.actions[step] = action
@@ -351,9 +391,9 @@ class MonteCarloSimulation:
             # estimation phase
             current_state = self.system.generate_state(self.history[0], self.history[1], 0, 0)
             self.states[step] = current_state
-            self.history[1] = current_state
             # store errors
             self.agent.update_V(current_state, self.history[0], self.history[1])
+            self.history[1] = current_state
             self.agent.estimate_model()
             self.agent.t = self.horizon - 1
             self.agent.h[:, :] = 1
