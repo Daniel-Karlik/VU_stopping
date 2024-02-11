@@ -5,17 +5,19 @@ from Learning_FPD_Stop_PE import Experiment
 num_states = 11
 num_actions = 5
 num_steps = 1
-num_mc_runs = 25
+num_mc_runs = 2
 horizon = 50
 ideal_s = np.array([5, 6])
 ideal_a = np.array([3])
 w = 0.05
 mu = 1.0
-len_sim = 300
+len_sim = 100
 q = 0.85
+type_of_run = 1
 
 if __name__ == '__main__':
-    experiment3 = Experiment(num_states, num_actions, num_steps, num_mc_runs, horizon, ideal_s, ideal_a, w, mu, len_sim, q)
+    experiment3 = Experiment(num_states, num_actions, num_steps, num_mc_runs, horizon, ideal_s, ideal_a, w, mu, len_sim,
+                             q, type_of_run)
     experiment3.run()
     experiment3.store_results()
 
